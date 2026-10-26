@@ -1,10 +1,14 @@
 require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 
 const connectDB = require('./config/db');
 const errorHandler = require('./middleware/errorHandler');
 const sensorSimulator = require('./services/sensorSimulator');
+const User = require('./models/User');
+const { seedAll } = require('./utils/seedData');
 
 const authRoutes = require('./routes/authRoutes');
 const lotRoutes = require('./routes/lotRoutes');
@@ -56,13 +60,36 @@ app.post('/api/verify-proof', authenticate, (req, res) => {
   });
 });
 
-app.use((req, res) => res.status(404).json({ error: 'Not found' }));
+// Serve frontend build in production if available
+const frontendDist = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+} else {
+  app.use((req, res) => res.status(404).json({ error: 'Not found' }));
+}
+
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
 async function start() {
   await connectDB();
+
+  // Auto-seed demo data if DB is empty
+  try {
+    const userCount = await User.countDocuments();
+    if (userCount === 0) {
+      console.log('[server] Database is empty, auto-seeding demo data...');
+      await seedAll();
+      console.log('[server] Auto-seed completed successfully.');
+    }
+  } catch (err) {
+    console.warn('[server] Warning: Could not verify/auto-seed database:', err.message);
+  }
+
   app.listen(PORT, () => {
     console.log(`[server] ammo-chain backend listening on port ${PORT}`);
     sensorSimulator.start();

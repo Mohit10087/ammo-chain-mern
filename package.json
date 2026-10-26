@@ -1,0 +1,19 @@
+{
+  "name": "ammo-chain-mern",
+  "version": "1.0.0",
+  "description": "Blockchain-Enabled Smart-Contract-Based Ammunition Management System",
+  "scripts": {
+    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "start": "node backend/server.js",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend"
+  },
+  "keywords": [
+    "mern",
+    "ammunition",
+    "blockchain",
+    "merkle-tree"
+  ],
+  "author": "Mohit10087",
+  "license": "ISC"
+}
