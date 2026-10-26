@@ -291,6 +291,14 @@ async function processSyncBatch(actor, { deviceId, deviceSecret, events = [] }) 
       } else {
         const fromId = lot.currentHolderId;
         lot.currentHolderId = toId;
+        if (toId.startsWith('DEPOT-')) {
+          lot.currentHolderOrg = 'Depot';
+          lot.sourceDepotId = toId;
+          lot.status = 'IN_STORAGE';
+        } else if (toId.startsWith('UNIT-')) {
+          lot.currentHolderOrg = 'FieldUnit';
+          lot.status = 'ISSUED';
+        }
         await lot.save();
 
         const block = await Ledger.addBlock({
@@ -300,7 +308,94 @@ async function processSyncBatch(actor, { deviceId, deviceSecret, events = [] }) 
             org: actor?.org || lot.currentHolderOrg,
             fromId,
             toId,
-            quantity: lot.quantity,
+            quantity: lot.quantity - lot.quantityConsumed,
+            offlineCaptured: true
+          },
+          submittedByOrg: actor?.org || 'FieldUnit',
+          submittedByUser: actor?.username || 'tactical-sync',
+          capturedAt: new Date(capturedAt),
+          syncedAt,
+          deviceId,
+          syncBatchId,
+          eventId
+        });
+
+        lot.lastBlockHash = block.hash;
+        await lot.save();
+        await merkleService.maybeAutoCheckpoint(actor, lotID);
+
+        appliedCount++;
+        device.totalApplied++;
+        results.push({
+          eventId,
+          sequenceNumber,
+          action,
+          status: 'APPLIED',
+          blockIndex: block.index,
+          blockHash: block.hash
+        });
+      }
+    } else if (action === 'RETURN_TO_DEPOT' || action === 'RETURN_DEPOT') {
+      const toDepotId = payload.toDepotId || payload.toId || 'DEPOT-01';
+      if (!lot) {
+        isConflict = true;
+        conflictReason = `Lot ${lotID} not found`;
+      } else if (['DISPOSED', 'CONSUMED'].includes(lot.status)) {
+        isConflict = true;
+        conflictReason = `Lot ${lotID} status is ${lot.status}, cannot return to depot`;
+      }
+
+      if (isConflict) {
+        const block = await Ledger.addBlock({
+          txType: 'CONFLICT_DETECTED',
+          lotID: lotID || null,
+          payload: {
+            originalAction: action,
+            originalPayload: payload,
+            conflictReason,
+            sequenceNumber,
+            deviceId,
+            sequenceWarning
+          },
+          submittedByOrg: actor?.org || 'FieldUnit',
+          submittedByUser: actor?.username || 'tactical-sync',
+          capturedAt: new Date(capturedAt),
+          syncedAt,
+          deviceId,
+          syncBatchId,
+          eventId
+        });
+
+        conflictCount++;
+        device.totalConflicts++;
+        results.push({
+          eventId,
+          sequenceNumber,
+          action,
+          status: 'CONFLICT_DETECTED',
+          blockIndex: block.index,
+          blockHash: block.hash,
+          reason: conflictReason
+        });
+      } else {
+        const fromOrg = lot.currentHolderOrg;
+        const fromId = lot.currentHolderId;
+
+        lot.currentHolderOrg = 'Depot';
+        lot.currentHolderId = toDepotId;
+        lot.sourceDepotId = toDepotId;
+        lot.status = 'IN_STORAGE';
+        await lot.save();
+
+        const block = await Ledger.addBlock({
+          txType: 'RETURN_TO_DEPOT',
+          lotID,
+          payload: {
+            fromOrg,
+            fromId,
+            toOrg: 'Depot',
+            toId: toDepotId,
+            quantity: lot.quantity - lot.quantityConsumed,
             offlineCaptured: true
           },
           submittedByOrg: actor?.org || 'FieldUnit',

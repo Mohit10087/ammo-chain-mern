@@ -1,6 +1,6 @@
 scenario_name,total_events,applied,conflicts,rejected_signatures,duplicates_ignored,merge_rate_pct,sync_latency_ms
-"1. Short Outage (10 events)",10,10,0,0,0,100,36.19
-"2. Medium Outage (25 events)",25,25,0,0,0,100,77.47
-"3. Long Outage (60 events)",60,60,0,0,0,100,138.31
+"1. Short Outage (10 events)",10,10,0,0,0,100,37.32
+"2. Medium Outage (25 events)",25,25,0,0,0,100,88.61
+"3. Long Outage (60 events)",60,60,0,0,0,100,224.25
 "4. Sequence Collision (2 devices)",2,1,1,0,0,50,12.4
-"5. Clock-Skew & Out-of-Order",10,8,0,0,2,80,18.49
+"5. Clock-Skew & Out-of-Order",10,8,0,0,2,80,21.06

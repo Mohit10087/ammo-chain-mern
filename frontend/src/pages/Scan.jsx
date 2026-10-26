@@ -77,12 +77,13 @@ export default function Scan() {
     OrdnanceFactory: [{ value: 'ISSUE_TO_DEPOT', label: 'Issue Manufactured Lot to Depot' }],
     Depot: [
       { value: 'ISSUE_TO_UNIT', label: 'Issue Lot to Field Unit' },
-      { value: 'TRANSFER', label: 'Transfer Laterally to another Depot' },
+      { value: 'TRANSFER_DEPOT', label: 'Transfer Laterally to another Depot' },
       { value: 'LOG_CONDITION', label: 'Log Depot Storage Condition' }
     ],
     FieldUnit: [
       { value: 'CONSUME', label: 'Record Ammunition Consumption' },
-      { value: 'TRANSFER', label: 'Transfer Laterally to another Field Unit' },
+      { value: 'TRANSFER_UNIT', label: 'Transfer Laterally to another Field Unit' },
+      { value: 'RETURN_DEPOT', label: 'Return Ammunition to Depot (Surplus / Rear Echelon)' },
       { value: 'LOG_CONDITION', label: 'Log Field Storage Condition' },
       { value: 'DISPOSE', label: 'Dispose Expired/Damaged Lot' }
     ]
@@ -108,19 +109,33 @@ export default function Scan() {
         await syncOfflineQueue(api);
       }
 
+      // Compute effective target with fallback defaults
+      let effectiveTarget = targetId.trim();
+      if (!effectiveTarget) {
+        if (action === 'ISSUE_TO_DEPOT') effectiveTarget = 'DEPOT-01';
+        else if (action === 'ISSUE_TO_UNIT') effectiveTarget = 'UNIT-ALPHA';
+        else if (action === 'TRANSFER_DEPOT') effectiveTarget = actor.depotId === 'DEPOT-01' ? 'DEPOT-02' : 'DEPOT-01';
+        else if (action === 'TRANSFER_UNIT') effectiveTarget = actor.depotId === 'UNIT-ALPHA' ? 'UNIT-BRAVO' : 'UNIT-ALPHA';
+        else if (action === 'RETURN_DEPOT') effectiveTarget = selectedLot?.sourceDepotId || 'DEPOT-01';
+      }
+
       let response;
       if (action === 'ISSUE_TO_DEPOT') {
-        if (!targetId.trim()) throw new Error('Please specify destination Depot ID (e.g. DEPOT-01).');
-        response = await api.post('/lots/issue', { lotID: effectiveLotID, toOrg: 'Depot', toId: targetId.trim() });
-        setResult(`✅ Lot ${effectiveLotID} issued to Depot ${targetId.trim()}.`);
+        if (!effectiveTarget) throw new Error('Please specify destination Depot ID (e.g. DEPOT-01).');
+        response = await api.post('/lots/issue', { lotID: effectiveLotID, toOrg: 'Depot', toId: effectiveTarget });
+        setResult(`✅ Lot ${effectiveLotID} issued to Depot ${effectiveTarget}.`);
       } else if (action === 'ISSUE_TO_UNIT') {
-        if (!targetId.trim()) throw new Error('Please specify destination Field Unit ID (e.g. UNIT-ALPHA).');
-        response = await api.post('/lots/issue', { lotID: effectiveLotID, toOrg: 'FieldUnit', toId: targetId.trim() });
-        setResult(`✅ Lot ${effectiveLotID} issued to Field Unit ${targetId.trim()}.`);
-      } else if (action === 'TRANSFER') {
-        if (!targetId.trim()) throw new Error('Please specify destination recipient ID.');
-        response = await api.post('/lots/transfer', { lotID: effectiveLotID, toId: targetId.trim() });
-        setResult(`✅ Lot ${effectiveLotID} transferred to ${targetId.trim()}.`);
+        if (!effectiveTarget) throw new Error('Please specify destination Field Unit ID (e.g. UNIT-ALPHA).');
+        response = await api.post('/lots/issue', { lotID: effectiveLotID, toOrg: 'FieldUnit', toId: effectiveTarget });
+        setResult(`✅ Lot ${effectiveLotID} issued to Field Unit ${effectiveTarget}.`);
+      } else if (action === 'TRANSFER_DEPOT' || action === 'TRANSFER_UNIT') {
+        if (!effectiveTarget) throw new Error('Please specify destination recipient ID.');
+        response = await api.post('/lots/transfer', { lotID: effectiveLotID, toId: effectiveTarget });
+        setResult(`✅ Lot ${effectiveLotID} laterally transferred to ${effectiveTarget}.`);
+      } else if (action === 'RETURN_DEPOT') {
+        if (!effectiveTarget) throw new Error('Please specify destination Depot ID.');
+        response = await api.post('/lots/return', { lotID: effectiveLotID, toDepotId: effectiveTarget });
+        setResult(`✅ Lot ${effectiveLotID} returned to Depot ${effectiveTarget} and restored to active storage.`);
       } else if (action === 'CONSUME') {
         const q = Number(quantity);
         if (!q || q <= 0) throw new Error('Please enter a positive consumption quantity.');
@@ -151,7 +166,7 @@ export default function Scan() {
     }
   }
 
-  const needsTarget = ['ISSUE_TO_DEPOT', 'ISSUE_TO_UNIT', 'TRANSFER'].includes(action);
+  const needsTarget = ['ISSUE_TO_DEPOT', 'ISSUE_TO_UNIT', 'TRANSFER_DEPOT', 'TRANSFER_UNIT', 'RETURN_DEPOT'].includes(action);
   const needsQuantity = action === 'CONSUME';
   const needsCondition = action === 'LOG_CONDITION';
 
@@ -294,14 +309,18 @@ export default function Scan() {
               <div className="field">
                 <label>
                   {action === 'ISSUE_TO_DEPOT'
-                    ? 'Target Depot ID (e.g. DEPOT-01, DEPOT-02)'
+                    ? 'Target Destination Depot'
+                    : action === 'TRANSFER_DEPOT'
+                    ? 'Target Peer Depot (Lateral Transfer)'
                     : action === 'ISSUE_TO_UNIT'
-                    ? 'Target Field Unit ID (e.g. UNIT-ALPHA, UNIT-BRAVO)'
-                    : 'Target Custodian ID'}
+                    ? 'Target Destination Field Unit'
+                    : action === 'TRANSFER_UNIT'
+                    ? 'Target Peer Field Unit (Lateral Transfer)'
+                    : 'Target Destination Depot (Return Surplus)'}
                 </label>
                 {action === 'ISSUE_TO_DEPOT' ? (
                   <select
-                    value={targetId}
+                    value={targetId || 'DEPOT-01'}
                     onChange={(e) => setTargetId(e.target.value)}
                     style={{
                       width: '100%',
@@ -312,13 +331,33 @@ export default function Scan() {
                     }}
                     required
                   >
-                    <option value="">Select Target Depot...</option>
-                    <option value="DEPOT-01">DEPOT-01</option>
-                    <option value="DEPOT-02">DEPOT-02</option>
+                    <option value="DEPOT-01">DEPOT-01 (Northern Command Depot)</option>
+                    <option value="DEPOT-02">DEPOT-02 (Eastern Command Depot)</option>
+                  </select>
+                ) : action === 'TRANSFER_DEPOT' ? (
+                  <select
+                    value={targetId || (actor.depotId === 'DEPOT-01' ? 'DEPOT-02' : 'DEPOT-01')}
+                    onChange={(e) => setTargetId(e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'var(--panel-raised)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text)',
+                      padding: '8px 10px'
+                    }}
+                    required
+                  >
+                    {['DEPOT-01', 'DEPOT-02']
+                      .filter((id) => id !== actor.depotId)
+                      .map((id) => (
+                        <option key={id} value={id}>
+                          {id} (Peer Command Depot)
+                        </option>
+                      ))}
                   </select>
                 ) : action === 'ISSUE_TO_UNIT' ? (
                   <select
-                    value={targetId}
+                    value={targetId || 'UNIT-ALPHA'}
                     onChange={(e) => setTargetId(e.target.value)}
                     style={{
                       width: '100%',
@@ -329,14 +368,50 @@ export default function Scan() {
                     }}
                     required
                   >
-                    <option value="">Select Target Field Unit...</option>
-                    <option value="UNIT-ALPHA">UNIT-ALPHA</option>
-                    <option value="UNIT-BRAVO">UNIT-BRAVO</option>
+                    <option value="UNIT-ALPHA">UNIT-ALPHA (1st Forward Battalion)</option>
+                    <option value="UNIT-BRAVO">UNIT-BRAVO (2nd Forward Battalion)</option>
+                  </select>
+                ) : action === 'TRANSFER_UNIT' ? (
+                  <select
+                    value={targetId || (actor.depotId === 'UNIT-ALPHA' ? 'UNIT-BRAVO' : 'UNIT-ALPHA')}
+                    onChange={(e) => setTargetId(e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'var(--panel-raised)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text)',
+                      padding: '8px 10px'
+                    }}
+                    required
+                  >
+                    {['UNIT-ALPHA', 'UNIT-BRAVO']
+                      .filter((id) => id !== actor.depotId)
+                      .map((id) => (
+                        <option key={id} value={id}>
+                          {id} (Peer Field Battalion)
+                        </option>
+                      ))}
+                  </select>
+                ) : action === 'RETURN_DEPOT' ? (
+                  <select
+                    value={targetId || (selectedLot?.sourceDepotId || 'DEPOT-01')}
+                    onChange={(e) => setTargetId(e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'var(--panel-raised)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text)',
+                      padding: '8px 10px'
+                    }}
+                    required
+                  >
+                    <option value="DEPOT-01">DEPOT-01 (Northern Command Depot)</option>
+                    <option value="DEPOT-02">DEPOT-02 (Eastern Command Depot)</option>
                   </select>
                 ) : (
                   <input
                     required
-                    placeholder="e.g. DEPOT-02 or UNIT-BRAVO"
+                    placeholder="Recipient ID"
                     value={targetId}
                     onChange={(e) => setTargetId(e.target.value)}
                   />

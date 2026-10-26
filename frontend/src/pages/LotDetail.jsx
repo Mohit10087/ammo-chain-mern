@@ -284,6 +284,7 @@ function RiskBar({ score }) {
 
 function ActionsPanel({ lot, actor, isHolder, onDone, onError }) {
   const [toId, setToId] = useState('');
+  const [returnDepotId, setReturnDepotId] = useState('DEPOT-01');
   const [consumeQty, setConsumeQty] = useState('');
   const [disposeReason, setDisposeReason] = useState('');
   const [temperatureC, setTemperatureC] = useState('');
@@ -305,11 +306,12 @@ function ActionsPanel({ lot, actor, isHolder, onDone, onError }) {
   const canIssueToDepot = actor.org === 'OrdnanceFactory' && lot.currentHolderOrg === 'OrdnanceFactory';
   const canIssueToUnit = actor.org === 'Depot' && isHolder && lot.currentHolderOrg === 'Depot';
   const canTransfer = ['Depot', 'FieldUnit'].includes(actor.org) && isHolder;
+  const canReturnToDepot = actor.org === 'FieldUnit' && isHolder && lot.currentHolderOrg === 'FieldUnit';
   const canConsume = actor.org === 'FieldUnit' && isHolder;
   const canDispose = ['Depot', 'FieldUnit'].includes(actor.org) && isHolder;
   const canLogCondition = ['Depot', 'FieldUnit'].includes(actor.org) && isHolder;
 
-  if (!canIssueToDepot && !canIssueToUnit && !canTransfer && !canConsume && !canDispose && !canLogCondition) {
+  if (!canIssueToDepot && !canIssueToUnit && !canTransfer && !canReturnToDepot && !canConsume && !canDispose && !canLogCondition) {
     return (
       <div className="panel">
         <div className="panel-title">Actions</div>
@@ -318,6 +320,17 @@ function ActionsPanel({ lot, actor, isHolder, onDone, onError }) {
     );
   }
 
+  const defaultPeerId =
+    actor.org === 'Depot'
+      ? actor.depotId === 'DEPOT-01'
+        ? 'DEPOT-02'
+        : 'DEPOT-01'
+      : actor.depotId === 'UNIT-ALPHA'
+      ? 'UNIT-BRAVO'
+      : 'UNIT-ALPHA';
+
+  const effectivePeerId = toId || defaultPeerId;
+
   return (
     <div className="panel">
       <div className="panel-title">Actions</div>
@@ -325,17 +338,36 @@ function ActionsPanel({ lot, actor, isHolder, onDone, onError }) {
       {(canIssueToDepot || canIssueToUnit) && (
         <div className="form-row" style={{ alignItems: 'end', marginBottom: 14 }}>
           <div className="field">
-            <label>{canIssueToDepot ? 'Issue to Depot ID' : 'Issue to Field Unit ID'}</label>
-            <input placeholder={canIssueToDepot ? 'DEPOT-01' : 'UNIT-ALPHA'} value={toId} onChange={(e) => setToId(e.target.value)} />
+            <label>{canIssueToDepot ? 'Issue to Destination Depot' : 'Issue to Field Unit'}</label>
+            {canIssueToDepot ? (
+              <select
+                value={toId || 'DEPOT-01'}
+                onChange={(e) => setToId(e.target.value)}
+                style={{ width: '100%', background: 'var(--panel-raised)', border: '1px solid var(--border-strong)', color: 'var(--text)', padding: '8px 10px' }}
+              >
+                <option value="DEPOT-01">DEPOT-01 (Northern Command)</option>
+                <option value="DEPOT-02">DEPOT-02 (Eastern Command)</option>
+              </select>
+            ) : (
+              <select
+                value={toId || 'UNIT-ALPHA'}
+                onChange={(e) => setToId(e.target.value)}
+                style={{ width: '100%', background: 'var(--panel-raised)', border: '1px solid var(--border-strong)', color: 'var(--text)', padding: '8px 10px' }}
+              >
+                <option value="UNIT-ALPHA">UNIT-ALPHA (1st Forward Battalion)</option>
+                <option value="UNIT-BRAVO">UNIT-BRAVO (2nd Forward Battalion)</option>
+              </select>
+            )}
           </div>
           <button
             className="btn btn-primary"
-            disabled={busy || !toId}
+            disabled={busy}
             onClick={() =>
               run(async () => {
-                await api.post('/lots/issue', { lotID: lot.lotID, toOrg: canIssueToDepot ? 'Depot' : 'FieldUnit', toId });
+                const target = toId || (canIssueToDepot ? 'DEPOT-01' : 'UNIT-ALPHA');
+                await api.post('/lots/issue', { lotID: lot.lotID, toOrg: canIssueToDepot ? 'Depot' : 'FieldUnit', toId: target });
                 setToId('');
-                onDone(`Lot issued to ${toId}.`);
+                onDone(`Lot issued to ${target}.`);
               })
             }
           >
@@ -347,21 +379,61 @@ function ActionsPanel({ lot, actor, isHolder, onDone, onError }) {
       {canTransfer && (
         <div className="form-row" style={{ alignItems: 'end', marginBottom: 14 }}>
           <div className="field">
-            <label>Transfer laterally to ID</label>
-            <input placeholder="DEPOT-02 / UNIT-BRAVO" value={toId} onChange={(e) => setToId(e.target.value)} />
+            <label>Transfer laterally to peer {actor.org === 'Depot' ? 'Depot' : 'Field Unit'}</label>
+            <select
+              value={effectivePeerId}
+              onChange={(e) => setToId(e.target.value)}
+              style={{ width: '100%', background: 'var(--panel-raised)', border: '1px solid var(--border-strong)', color: 'var(--text)', padding: '8px 10px' }}
+            >
+              {actor.org === 'Depot'
+                ? ['DEPOT-01', 'DEPOT-02']
+                    .filter((id) => id !== actor.depotId)
+                    .map((id) => <option key={id} value={id}>{id} (Peer Command Depot)</option>)
+                : ['UNIT-ALPHA', 'UNIT-BRAVO']
+                    .filter((id) => id !== actor.depotId)
+                    .map((id) => <option key={id} value={id}>{id} (Peer Field Battalion)</option>)}
+            </select>
           </div>
           <button
             className="btn"
-            disabled={busy || !toId}
+            disabled={busy}
             onClick={() =>
               run(async () => {
-                await api.post('/lots/transfer', { lotID: lot.lotID, toId });
+                await api.post('/lots/transfer', { lotID: lot.lotID, toId: effectivePeerId });
                 setToId('');
-                onDone(`Lot transferred to ${toId}.`);
+                onDone(`Lot laterally transferred to ${effectivePeerId}.`);
               })
             }
           >
-            Transfer
+            Transfer Laterally
+          </button>
+        </div>
+      )}
+
+      {canReturnToDepot && (
+        <div className="form-row" style={{ alignItems: 'end', marginBottom: 14 }}>
+          <div className="field">
+            <label>Return Ammunition to Rear Depot (Surplus / Back-loading)</label>
+            <select
+              value={returnDepotId}
+              onChange={(e) => setReturnDepotId(e.target.value)}
+              style={{ width: '100%', background: 'var(--panel-raised)', border: '1px solid var(--border-strong)', color: 'var(--text)', padding: '8px 10px' }}
+            >
+              <option value="DEPOT-01">DEPOT-01 (Northern Command Depot)</option>
+              <option value="DEPOT-02">DEPOT-02 (Eastern Command Depot)</option>
+            </select>
+          </div>
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                await api.post('/lots/return', { lotID: lot.lotID, toDepotId: returnDepotId });
+                onDone(`Lot returned to Depot ${returnDepotId} and restored to active storage.`);
+              })
+            }
+          >
+            Return to Depot
           </button>
         </div>
       )}

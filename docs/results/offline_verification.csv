@@ -1,6 +1,6 @@
 test_name,expected,observed,pass_fail
 "Tampered HMAC signature is rejected","REJECTED_BAD_SIGNATURE","REJECTED_BAD_SIGNATURE","PASS"
 "Replaying the same event batch is idempotent","DUPLICATE_IGNORED","DUPLICATE_IGNORED","PASS"
-"Merge conflict produces immutable CONFLICT_DETECTED block","CONFLICT_DETECTED block on ledger","Block #31 (CONFLICT_DETECTED)","PASS"
+"Merge conflict produces immutable CONFLICT_DETECTED block","CONFLICT_DETECTED block on ledger","Block #45 (CONFLICT_DETECTED)","PASS"
 "Ledger integrity verifies clean after conflict and sync merges","VALID_HASH_CHAIN","VALID_HASH_CHAIN","PASS"
 "Out-of-order received events are sorted and committed in sequence","Order: [4, 5]","Order: [4, 5]","PASS"

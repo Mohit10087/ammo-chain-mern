@@ -19,6 +19,7 @@ echo ""
 echo "--- [1/6] Running Core Logic Smoke Tests ---"
 cd "$BACKEND_DIR"
 node scripts/testLogic.js
+node scripts/testCustodyTransfer.js
 echo ""
 
 # 2. Phase 1: Merkle Tree Pure & MongoDB Tamper Tests

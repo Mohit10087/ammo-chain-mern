@@ -156,15 +156,34 @@ async function transferLot(actor, { lotID, toId }) {
   assertHolder(lot, actor);
   if (!toId) throw new ContractError('toId is required');
 
+  const trimmedToId = toId.trim();
   const fromId = lot.currentHolderId;
-  lot.currentHolderId = toId;
-  if (actor.org === 'Depot') lot.sourceDepotId = toId;
+
+  if (trimmedToId === fromId) {
+    throw new ContractError(`Cannot transfer lot to the same entity (${trimmedToId})`, 400);
+  }
+
+  if (actor.org === 'Depot') {
+    if (trimmedToId.startsWith('UNIT-')) {
+      throw new ContractError('To dispatch ammunition to a field unit, use Issue Lot.', 400);
+    }
+    lot.currentHolderOrg = 'Depot';
+    lot.currentHolderId = trimmedToId;
+    lot.sourceDepotId = trimmedToId;
+  } else if (actor.org === 'FieldUnit') {
+    if (trimmedToId.startsWith('DEPOT-')) {
+      throw new ContractError('Lateral transfer is only permitted to peer Field Units (e.g. UNIT-BRAVO). To return ammunition to a rear depot, use Return to Depot.', 400);
+    }
+    lot.currentHolderOrg = 'FieldUnit';
+    lot.currentHolderId = trimmedToId;
+  }
+
   await lot.save();
 
   const block = await Ledger.addBlock({
     txType: 'TRANSFER_LOT',
     lotID,
-    payload: { org: actor.org, fromId, toId, quantity: lot.quantity },
+    payload: { org: actor.org, fromId, toId: trimmedToId, quantity: lot.quantity - lot.quantityConsumed },
     submittedByOrg: actor.org,
     submittedByUser: actor.username
   });
@@ -172,10 +191,61 @@ async function transferLot(actor, { lotID, toId }) {
   await lot.save();
   await merkleService.maybeAutoCheckpoint(actor, lot.lotID);
 
-  await anomalyService.checkIssueAnomalies({ lot, fromOrg: actor.org, fromId, toOrg: actor.org, toId });
+  await anomalyService.checkIssueAnomalies({ lot, fromOrg: actor.org, fromId, toOrg: actor.org, toId: trimmedToId });
 
   return lot;
 }
+
+/* ------------------------------------------------------------------ *
+ * 3b. returnToDepot - FieldUnit -> Depot (Back-loading / Surplus return)
+ * ------------------------------------------------------------------ */
+async function returnToDepot(actor, { lotID, toDepotId, reason = 'Surplus / Return to Rear Depot' }) {
+  const lot = await Lot.findOne({ lotID });
+  if (!lot) throw new ContractError(`Lot ${lotID} not found`, 404);
+
+  if (actor.org !== 'FieldUnit') {
+    throw new ContractError(`Only FieldUnit may return ammunition lots to a Depot`, 403);
+  }
+  assertHolder(lot, actor);
+
+  if (!toDepotId) throw new ContractError('toDepotId (destination depot ID) is required', 400);
+  const trimmedDepotId = toDepotId.trim();
+  const validDepots = ['DEPOT-01', 'DEPOT-02'];
+  if (!validDepots.includes(trimmedDepotId)) {
+    throw new ContractError(`Invalid target depot '${trimmedDepotId}'. Must be one of: ${validDepots.join(', ')}`, 400);
+  }
+
+  const fromOrg = lot.currentHolderOrg;
+  const fromId = lot.currentHolderId;
+
+  lot.currentHolderOrg = 'Depot';
+  lot.currentHolderId = trimmedDepotId;
+  lot.sourceDepotId = trimmedDepotId;
+  lot.status = 'IN_STORAGE';
+  await lot.save();
+
+  const block = await Ledger.addBlock({
+    txType: 'RETURN_TO_DEPOT',
+    lotID,
+    payload: {
+      fromOrg,
+      fromId,
+      toOrg: 'Depot',
+      toId: trimmedDepotId,
+      quantity: lot.quantity - lot.quantityConsumed,
+      reason
+    },
+    submittedByOrg: actor.org,
+    submittedByUser: actor.username
+  });
+
+  lot.lastBlockHash = block.hash;
+  await lot.save();
+  await merkleService.maybeAutoCheckpoint(actor, lot.lotID);
+
+  return lot;
+}
+
 
 /* ------------------------------------------------------------------ *
  * 4. recordConsumption - Field Unit only
@@ -396,6 +466,7 @@ module.exports = {
   registerLot,
   issueLot,
   transferLot,
+  returnToDepot,
   recordConsumption,
   disposeLot,
   checkStockLevel,

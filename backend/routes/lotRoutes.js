@@ -124,6 +124,16 @@ router.post('/transfer', requireOrg('Depot', 'FieldUnit'), async (req, res, next
   }
 });
 
+// POST /api/lots/return - Field Unit returns ammunition to Depot
+router.post('/return', requireOrg('FieldUnit'), async (req, res, next) => {
+  try {
+    const lot = await smartContracts.returnToDepot(req.actor, req.body);
+    res.json({ lot });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/lots/consume - Field Unit only, this is what the "scan-out" page calls
 router.post('/consume', requireOrg('FieldUnit'), async (req, res, next) => {
   try {

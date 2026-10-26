@@ -41,9 +41,10 @@ const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
  */
 async function scoreWithML(data) {
   try {
+    const serviceUrl = process.env.ML_SERVICE_URL || 'http://localhost:8000';
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 800);
-    const res = await fetch(`${ML_SERVICE_URL}/score`, {
+    const res = await fetch(`${serviceUrl}/score`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),

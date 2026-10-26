@@ -19,6 +19,7 @@ const blockSchema = new mongoose.Schema(
         'REGISTER_LOT',
         'ISSUE_LOT',
         'TRANSFER_LOT',
+        'RETURN_TO_DEPOT',
         'RECORD_CONSUMPTION',
         'DISPOSE_LOT',
         'UPDATE_STORAGE_CONDITION',
