@@ -1,0 +1,116 @@
+/*
+  DESIGN SYSTEM - "Ordnance-Chain" dispatch console
+  ---------------------------------------------------
+  Grounded in the subject: a defense logistics ledger, not a generic SaaS
+  dashboard. The reference point is a depot dispatch office / manifest desk -
+  stencilled lot numbers, hairline rules, sharp corners, and a restrained,
+  government-issue palette (slate, olive, amber, rust) rather than a single
+  bright accent on black. Signature element: the "ledger strip" - a row of
+  connected hex-block chips that make the hash-chain literally visible
+  wherever lot history appears (see components/LedgerStrip.jsx).
+*/
+
+:root {
+  /* Color */
+  --bg: #12161a;
+  --panel: #1a2027;
+  --panel-raised: #212932;
+  --border: #2c343d;
+  --border-strong: #3c4650;
+  --text: #e9e6dc;
+  --text-muted: #97a0aa;
+  --text-faint: #616a74;
+
+  --accent-steel: #5b8ba8;
+  --accent-steel-dim: #3d6178;
+  --accent-olive: #6f9c7f;
+  --accent-olive-dim: #3f5c48;
+  --accent-amber: #d19a3d;
+  --accent-amber-dim: #6b5227;
+  --accent-rust: #c14a3a;
+  --accent-rust-dim: #632923;
+
+  /* Type */
+  --font-display: 'Big Shoulders Display', 'Arial Narrow', sans-serif;
+  --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+
+  /* Layout */
+  --sidebar-w: 232px;
+  --topbar-h: 60px;
+  --radius: 2px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent-steel);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent-steel);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin: 0 0 12px 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

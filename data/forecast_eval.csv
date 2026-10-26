@@ -1,0 +1,5 @@
+method,MAPE_%,median_APE_%
+naive,23.24,16.11
+ma3,25.84,21.55
+ols12,35.48,31.13
+seasonal_naive,20.93,14.86
