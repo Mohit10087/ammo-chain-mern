@@ -7,7 +7,7 @@
  */
 const assert = require('assert');
 const degradationService = require('../services/degradationService');
-const { movingAverage, linearRegressionForecast } = require('../services/forecastService');
+const { movingAverage, linearRegressionForecast, seasonalNaive } = require('../services/forecastService');
 const { computeHash, GENESIS_PREVIOUS_HASH } = require('../blockchain/Ledger');
 
 async function testDegradation() {
@@ -28,7 +28,11 @@ function testForecast() {
   const rising = linearRegressionForecast([100, 110, 120, 130]);
   assert(rising.slope > 0, 'rising series should have a positive slope');
   assert(rising.forecast > 130, 'forecast for a rising trend should extrapolate beyond the last value');
-  console.log('  ok: forecastService - moving average + linear regression behave as expected');
+
+  const history = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 15];
+  const snaive = seasonalNaive(history, 12);
+  assert.strictEqual(snaive, 20, 'seasonal naive must lag by season length (12)');
+  console.log('  ok: forecastService - moving average + linear regression + seasonal naive behave as expected');
 }
 
 function testLedgerHashing() {

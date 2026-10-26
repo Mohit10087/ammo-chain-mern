@@ -46,21 +46,39 @@ function linearRegressionForecast(values) {
   return { forecast, slope: Math.round(slope * 100) / 100, intercept: Math.round(intercept * 100) / 100 };
 }
 
+/** Seasonal-naive: predicts consumption matching the same month last year (lag 12) */
+function seasonalNaive(values, seasonLength = 12) {
+  if (values.length < seasonLength) {
+    return values.length > 0 ? values[values.length - 1] : 0;
+  }
+  return values[values.length - seasonLength];
+}
+
 async function forecastNextPeriod(ammoType) {
   const history = await ConsumptionHistory.find({ ammoType }).sort({ period: 1 }).lean();
   if (history.length === 0) {
-    return { ammoType, history: [], movingAverageForecast: 0, linearRegressionForecast: 0, slope: 0, intercept: 0 };
+    return {
+      ammoType,
+      history: [],
+      movingAverageForecast: 0,
+      linearRegressionForecast: 0,
+      seasonalNaiveForecast: 0,
+      slope: 0,
+      intercept: 0
+    };
   }
 
   const consumedSeries = history.map((h) => h.quantityConsumed);
   const ma = movingAverage(consumedSeries, 3);
   const lr = linearRegressionForecast(consumedSeries);
+  const snaive = seasonalNaive(consumedSeries, 12);
 
   return {
     ammoType,
     history,
     movingAverageForecast: ma,
     linearRegressionForecast: lr.forecast,
+    seasonalNaiveForecast: snaive,
     slope: lr.slope,
     intercept: lr.intercept
   };
@@ -75,4 +93,10 @@ async function forecastAll() {
   return results;
 }
 
-module.exports = { forecastNextPeriod, forecastAll, movingAverage, linearRegressionForecast };
+module.exports = {
+  forecastNextPeriod,
+  forecastAll,
+  movingAverage,
+  linearRegressionForecast,
+  seasonalNaive
+};

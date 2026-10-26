@@ -14,6 +14,9 @@
     "test:offline": "node scripts/testOfflineSync.js",
     "test:outage": "node scripts/simulateOutage.js",
     "test:ml": "node scripts/testMLAnomaly.js",
+    "eval:forecast": "node scripts/evalForecast.js",
+    "eval:degradation": "node scripts/evalDegradation.js",
+    "verify:all": "bash ../scripts/verifyAll.sh",
     "ml:serve": "uvicorn ml.service.app:app --host 0.0.0.0 --port 8000 --app-dir ..",
     "ml:train": "python3 ../ml/train_isolation_forest.py",
     "test": "node scripts/testLogic.js && node scripts/testMerkle.js && node scripts/testOfflineSync.js && node scripts/testMLAnomaly.js"

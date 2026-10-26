@@ -1,257 +1,191 @@
 # Ordnance-Chain
 
-**Blockchain-Enabled Smart-Contract-Based Ammunition Management System — MERN edition**
+**Blockchain-Enabled Smart-Contract-Based Ammunition Management System — Capstone & Research Edition**
 
-A permissioned, tamper-evident ledger that tracks ammunition through its full
-lifecycle (procurement → issue → transfer → consumption → disposal), with
-smart-contract-style business logic automating replenishment, degradation
-alerts, and anomaly flagging, behind a role-based React dashboard.
+Ordnance-Chain is a permissioned, tamper-evident ammunition lifecycle ledger (procurement → issue → lateral transfer → consumption → disposal), featuring smart-contract-equivalent business logic, automated replenishment triggers, Arrhenius degradation scoring, demand forecasting, and role-based tactical dispatch consoles.
 
-This is a **from-scratch MERN-stack rebuild** of a capstone spec originally
-written against Hyperledger Fabric. Every functional requirement from that
-spec is implemented; the underlying platform is different, and that
-trade-off is explained below so you can defend it in a viva.
+This codebase contains the complete production implementation and empirical verification for **four major architectural innovations** engineered to address military operational challenges:
+1. **Per-Lot Merkle Tree Audit Layer** ($O(\log n)$ block audit proofs via RFC 6962 domain separation and in-browser Web Crypto verification).
+2. **Offline Store-and-Forward Queue for DDIL Tactical Resilience** (IndexedDB client queue, monotonic sequence counters, HMAC-SHA256 authentication, and audited `CONFLICT_DETECTED` ledger blocks).
+3. **Dual-Layer Machine Learning Anomaly Detection** (FastAPI Isolation Forest microservice with distributional feature z-scores, 800ms Node.js abort fallback, and superior recall on subtle burst/off-hours evasions).
+4. **Seasonal-Naive Demand Forecasting & Arrhenius Degradation Sweep** (Annual training-cycle seasonal forecaster achieving 20.93% MAPE and empirical degradation threshold sweep achieving 0.757 F1-score).
 
 ---
 
-## 1. Why MERN instead of Hyperledger Fabric
+## 1. Core Architectural Innovations
 
-The original design targeted Hyperledger Fabric — a real permissioned
-blockchain platform. Standing up a Fabric network (orderers, peers,
-certificate authorities, channels, chaincode containers) is a large amount
-of infrastructure for a one-semester, three-person build, and most of it is
-invisible to anyone evaluating the *system's behaviour* rather than its
-deployment topology.
+### 1.1 Per-Lot Merkle Tree Audit Layer (Phase 1)
+- **Challenge**: In a global hash chain with $N \ge 10^5$ blocks, verifying the integrity of a specific lot's history on bandwidth-constrained field terminals requires $O(N)$ sequential hash recalculations.
+- **Solution**: A per-lot hierarchical Merkle tree (`backend/blockchain/merkle.js`) anchored into the ledger via `MERKLE_CHECKPOINT` blocks.
+- **Security**: Strict RFC 6962 domain separation (`0x00` leaf prefix, `0x01` internal node prefix) and odd-node elevation to prevent second-preimage collision attacks (CVE-2012-2459).
+- **Client Execution**: In-browser Web Crypto proof inspector (`frontend/src/utils/webCryptoMerkle.js`) renders full cryptographic proof paths and byte payloads directly in the user interface.
+- **Empirical Result**: Demonstrates up to **9,560.2$\times$ speedup** over linear chain traversal at 100,000 blocks, requiring only 544 bytes for a complete audit proof (`docs/results/merkle_benchmark.csv`).
 
-What actually matters for the brief — an **append-only, tamper-evident
-transaction log**, **role-gated write functions**, and a **queryable current
-state** — can be built directly on MongoDB with about 150 lines of hashing
-logic. This project does that, and documents the substitution honestly
-instead of pretending it's Fabric under the hood.
+### 1.2 DDIL Tactical Store-and-Forward Queue (Phase 2)
+- **Challenge**: Forward artillery and infantry units operate in Disconnected, Intermittent, and Limited-Bandwidth (DDIL) tactical environments where central servers are unreachable.
+- **Solution**: A resilient store-and-forward architecture (`frontend/src/utils/offlineQueue.js` and `backend/services/syncService.js`).
+- **Cryptographic Authentication**: Offline events are queued in client IndexedDB and signed via Web Crypto HMAC-SHA256 with monotonic per-device sequence numbers ($s \in \mathbb{N}^+$).
+- **Zero Silent Data Loss**: Upon link restoration, the server enforces idempotency, validates sequence monotonicity, and reconciles state. If concurrent world-state collisions occur, the server creates an immutable `CONFLICT_DETECTED` block on the ledger rather than silently dropping data.
+- **Empirical Result**: 100% transaction preservation and reconciliation across simulated short (10 events), medium (25 events), and long (60 events) comms outages (`docs/results/offline_scenarios.csv`).
 
-| Original Fabric concept | This project's MERN equivalent | Where |
-|---|---|---|
-| Ordered transaction log / ledger blocks | Hash-chained `Block` collection (SHA-256, each block embeds the previous block's hash) | `backend/blockchain/Ledger.js` |
-| Chaincode functions | Plain Node functions with the same names and signatures | `backend/blockchain/smartContracts.js` |
-| ABAC on chaincode (org/role gating) | JWT carries `org` + `depotId`/unit id; middleware + per-function holder checks | `backend/middleware/auth.js`, `assertHolder()` in `smartContracts.js` |
-| CouchDB world state | `Lot`, `Requisition`, `InspectionAlert`, `AnomalyFlag` collections, always derived from the ledger | `backend/models/` |
-| `GetHistoryForKey(lotID)` | `Ledger.getHistory(lotID)` | `backend/blockchain/Ledger.js` |
-| Peer endorsement / multi-node consensus | **Not reproduced.** Single writer, single MongoDB instance. | Documented simplification — see §7 |
-| RFID/QR hardware | QR codes generated server-side (`qrcode` npm package); scan-in/scan-out simulated via a manual-entry "Scan" page | `backend/services/qrService.js`, `frontend/src/pages/Scan.jsx` |
-| Real IoT sensors | Background job generates plausible temperature/humidity readings on an interval | `backend/services/sensorSimulator.js` |
-| Python forecasting/degradation scripts | Plain JavaScript, same formulas, no ML | `backend/services/degradationService.js`, `forecastService.js` |
+### 1.3 Dual-Layer ML Anomaly Detection (Phase 3)
+- **Challenge**: Deterministic rules (e.g. quantity $> 3\times$ mean) are completely blind to distributed evasion tactics such as rapid small-quantity burst issues or off-hours siphoning.
+- **Solution**: A dual-layer hybrid detector combining deterministic rules with an unsupervised Isolation Forest microservice (`ml/service/app.py`).
+- **Resilience**: Node.js communicates with FastAPI using an `AbortSignal.timeout(800ms)` hard limit, ensuring zero disruption or latency lag to core ledger transactions if the ML service is unreachable.
+- **Explainability**: Every flagged anomaly exports top feature z-scores against training distributions (e.g., `events_last_hour_lot (z = 43.14)`).
+- **Empirical Result**: On subtle evasion patterns ($v_2$), rule-only recall drops to 43.9% (0% on burst attacks). The Hybrid OR detector achieves **61.4% recall and 0.737 F1-score**, successfully capturing 66.7% of distributed burst attacks (`docs/results/ml_metrics.json`).
 
-If your evaluators specifically require Fabric, this codebase is not a
-drop-in replacement for that — but every *feature* in the original spec
-(roles, lifecycle chaincode, QR simulation, auto-replenishment, degradation
-scoring, forecasting, anomaly rules, role-based dashboard) is present and
-working here, in a stack that runs with `npm install && npm start`.
+### 1.4 Seasonal-Naive Forecasting & Arrhenius Degradation (Phase 4)
+- **Demand Forecasting**: Evaluated across 180 out-of-sample windows over 5 ammunition calibers (`docs/results/forecast_eval.csv`). The 12-month **Seasonal-Naive** forecaster achieves **20.93% MAPE**, outperforming OLS linear regression (35.48% MAPE) by **14.55 percentage points**.
+- **Degradation Optimization**: Systematic threshold sweep on 80 lots subjected to 10,000 synthetic IoT environmental telemetry readings. Threshold $\tau = 65$ achieves the optimal trade-off with **87.5% recall and 0.757 F1-score** (`docs/results/degradation_eval.csv`).
 
 ---
 
-## 2. Tech stack
-
-- **MongoDB** — ledger storage (`Block` collection) + world-state collections
-- **Express + Node.js** — REST API, JWT auth, the "chaincode" business-logic layer
-- **React (Vite)** — role-based dashboard
-- **No Python, no Hyperledger Fabric, no separate ML service** — everything
-  runs in one JS runtime on each side, which is what makes `npm run seed`
-  followed by two `npm run dev`s enough to get a full demo running.
-
----
-
-## 3. Project layout
+## 2. System Architecture & Diagrams
 
 ```
-ammo-chain-mern/
-├── backend/
-│   ├── blockchain/
-│   │   ├── Ledger.js            # hash-chained ledger primitive
-│   │   └── smartContracts.js    # chaincode-equivalent business logic
-│   ├── models/                  # Mongoose schemas (Block, Lot, User, ...)
-│   ├── middleware/               # JWT auth + ABAC-style org/holder checks
-│   ├── routes/                   # thin HTTP layer over smartContracts.js
-│   ├── services/                 # degradation, forecasting, anomaly rules,
-│   │                              # QR generation, sensor simulator
-│   ├── utils/seedData.js         # synthetic demo data generator
-│   ├── scripts/seed.js           # `npm run seed`
-│   ├── scripts/testLogic.js      # `npm run test:logic` (no DB required)
-│   └── server.js
-└── frontend/
-    └── src/
-        ├── pages/                 # one file per dashboard view
-        ├── components/            # Sidebar, TopBar, LedgerStrip, ...
-        ├── context/AuthContext.jsx
-        └── api/client.js
+                    +------------------------------------+
+                    |        React / Vite Dashboard      |
+                    |  - In-Browser Web Crypto Merkle    |
+                    |  - IndexedDB DDIL Offline Queue    |
+                    +-----------------+------------------+
+                                      |
+                      REST / JSON     | Batched HMAC Sync
+                                      v
+                    +------------------------------------+
+                    |       Node.js / Express API        |
+                    |  - JWT & Role Middleware (ABAC)    |
+                    |  - Smart Contracts (State Machine) |
+                    |  - Merkle Checkpoint Service       |
+                    |  - Sync Engine (Conflict Handling) |
+                    +---------+----------------+---------+
+                              |                |
+             AbortSignal      |                | Mongoose
+             Timeout (800ms)  v                v
+        +-------------------------+   +--------------------+
+        |  Python FastAPI Service |   |  MongoDB Database  |
+        |  - Isolation Forest ML  |   |  - Blocks (Ledger) |
+        |  - Feature Z-Scores     |   |  - Lots (State)    |
+        |  - Explainability Engine|   |  - DeviceState     |
+        +-------------------------+   |  - AnomalyFlags    |
+                                      +--------------------+
 ```
+
+Detailed Mermaid architectural diagrams are available in `docs/diagrams/`:
+- `docs/diagrams/merkle_proof.mmd`: RFC 6962 tree structure, odd node promotion, and proof paths.
+- `docs/diagrams/ddil_sync_flow.mmd`: Tactical offline capture and server-side reconciliation sequence.
+- `docs/diagrams/ml_anomaly_architecture.mmd`: Dual-layer rule + ML scoring flow with 800ms abort fallback.
+- `docs/diagrams/system_architecture.mmd`: Full component topology and data interactions.
 
 ---
 
-## 4. Setup
+## 3. Quick Start & Setup
 
 ### Prerequisites
-- Node.js 18+
-- A MongoDB instance — either:
-  - **Local**: install MongoDB Community Server and run `mongod` (default
-    port 27017), or
-  - **Atlas**: create a free cluster at mongodb.com and copy its connection
-    string.
+- **Node.js**: v18+ (tested on v25.2.1)
+- **MongoDB**: Local Community Server (`mongodb://127.0.0.1:27017/ammo_chain`) or MongoDB Atlas
+- **Python**: 3.10+ (for ML microservice)
 
-### 4.1 Backend
+### 3.1 Automated Full-Stack Verification (One-Command Test)
+To verify all unit tests, formal property proofs, outage simulations, and ML evaluations across all phases:
+```bash
+./scripts/verifyAll.sh
+```
+This executes all test suites and validates that all 14 benchmark artifacts in `docs/results/` are present and mathematically consistent.
 
+### 3.2 Backend Setup
 ```bash
 cd backend
 cp .env.example .env
-# edit .env if your MongoDB URI, JWT secret, or thresholds differ from the defaults
 npm install
-npm run test:logic     # optional: pure-logic smoke tests, no DB needed
-npm run seed            # creates demo users, ~12 lots run through real
-                         # smart-contract calls, and 12 months of synthetic
-                         # consumption history per ammo type
-npm run dev              # starts the API on http://localhost:5000
-                         #   (npm start for a non-watching run)
+
+# Run database seed (creates demo users, 12 lots, and 12-month consumption history)
+npm run seed
+
+# Run test suites
+npm run test:logic     # Pure-logic smoke tests (no DB required)
+npm run test:merkle    # Merkle tree pure unit & MongoDB direct tamper tests
+npm run test:offline   # Formal DDIL queue property verification tests
+npm run test:ml        # ML microservice & fallback verification tests
+npm test               # Runs all test suites sequentially
+
+# Start backend server
+npm run dev            # Starts Express API on http://localhost:5000
 ```
 
-`npm run seed` prints the demo usernames; all of them share the password
-`Password123!`:
+### 3.3 Python ML Microservice Setup
+```bash
+# In repository root:
+pip3 install -r ml/requirements.txt
 
-| Username | Org | ID |
-|---|---|---|
-| `commander` | Commander | — (read-only, cross-org) |
-| `factory_officer` | OrdnanceFactory | — |
-| `depot1_officer` | Depot | DEPOT-01 |
-| `depot2_officer` | Depot | DEPOT-02 |
-| `unit_alpha` | FieldUnit | UNIT-ALPHA |
-| `unit_bravo` | FieldUnit | UNIT-BRAVO |
+# Start the FastAPI microservice
+uvicorn ml.service.app:app --host 0.0.0.0 --port 8000
 
-### 4.2 Frontend
+# Verify health endpoint:
+curl http://localhost:8000/health
+# {"status":"ok","service":"ordnance-ml-anomaly","modelLoaded":true,"nFeatures":16}
+```
+*(Docker containerization also available via `docker build -t ordnance-ml -f ml/Dockerfile .`)*
 
+### 3.4 Frontend Setup
 ```bash
 cd frontend
-cp .env.example .env    # defaults to http://localhost:5000/api, edit if needed
+cp .env.example .env
 npm install
-npm run dev              # opens on http://localhost:5173
+npm run build          # Builds production Vite bundle cleanly
+npm run dev            # Starts development server on http://localhost:5173
 ```
 
-Log in as any of the seeded users above. Try `depot1_officer` first — Depot
-accounts can see the most actions (issue to field units, transfer, approve
-requisitions, log conditions, dispose).
+---
+
+## 4. Demo Accounts & Walkthrough
+
+All accounts share the password **`Password123!`**:
+
+| Username | Role / Org | Primary Capabilities |
+|:---|:---|:---|
+| `factory_officer` | OrdnanceFactory | Register new ammunition lots, initial dispatch |
+| `depot1_officer` | Depot (`DEPOT-01`) | Issue to field units, lateral transfer, manage requisitions |
+| `depot2_officer` | Depot (`DEPOT-02`) | Lateral transfer recipient, depot inspection logging |
+| `unit_alpha` | FieldUnit (`UNIT-ALPHA`) | Consume ammunition, log telemetry, trigger auto-replenishment |
+| `unit_bravo` | FieldUnit (`UNIT-BRAVO`) | Capture offline tactical events, sync IndexedDB queue |
+| `commander` | Commander | Cross-org global oversight, ledger integrity auditor |
 
 ---
 
-## 5. A five-minute viva walkthrough
+## 5. Benchmarking & Empirical Data
 
-1. **Login as `factory_officer`.** Go to *Lot Registry* → register a new
-   lot. Note the lot appears instantly with status `REGISTERED`.
-2. **Open the lot's detail page.** The *Ledger History* strip shows one
-   block (`REGISTER_LOT`) with its hash. This is the append-only log — point
-   at *Ledger Explorer* → *Verify Chain Integrity* to show the whole chain
-   hash-checks clean.
-3. **Issue it to a depot** from the lot detail page's Actions panel.
-   A second block (`ISSUE_LOT`) appears in the history strip, and the lot's
-   holder updates.
-4. **Log in as `depot1_officer`.** Issue the same lot on to `UNIT-ALPHA`.
-5. **Log in as `unit_alpha`.** On the lot detail page, record a consumption
-   of most of the lot's quantity. Point out the success message: if that
-   pushes the *depot's* total stock for that ammo type below the
-   replenishment threshold (500 rounds by default, see `.env`), a
-   `Requisition` is auto-created — visible immediately on the *Requisitions*
-   page, and as a `CREATE_REQUISITION` block in the ledger.
-6. **Log storage conditions** (same lot, Actions panel) with a high
-   temperature (e.g. 45°C) and humidity (e.g. 80%). The risk score jumps;
-   if it crosses the alert threshold (70 by default) the lot is
-   auto-flagged and appears on the *Degradation Alerts* page with the
-   Arrhenius-style breakdown available in the block payload (Ledger
-   Explorer).
-7. **Visit *Demand Forecast*.** Shows 12 months of synthetic consumption per
-   ammo type with both a moving-average and a linear-regression next-period
-   forecast, worked out with the visible slope/intercept — nothing here is
-   a black box.
-8. **Visit *Anomaly Flags*.** If you repeat an issue/transfer on the same
-   lot within 10 minutes, or issue an unusually large quantity, a rule
-   fires here automatically — again, purely from re-reading the ledger, no
-   ML.
-9. **Log in as `commander`.** Everything above rolls up read-only across
-   every org — the *Overview* page's stock table spans all depots and
-   units at once.
+All benchmark results and paper snippets are stored in `docs/`:
+- `docs/results/merkle_benchmark.csv`: Speedup data ($N = 10$ to $100,000$).
+- `docs/results/offline_verification.csv`: 5 formal DDIL safety property results.
+- `docs/results/offline_scenarios.csv`: Outage duration and merge recovery rates.
+- `docs/results/ml_metrics.json`: Precision, Recall, and F1 across 4 detectors on $v_1$ and $v_2$.
+- `docs/results/forecast_eval.csv`: 12-month rolling-origin forecast comparison.
+- `docs/results/degradation_eval.csv`: Arrhenius threshold sensitivity sweep ($\tau \in [30, 90]$).
+- `docs/REPORT_SNIPPETS.md`: Formatted, publication-ready text and tables for academic reporting.
+
+To reproduce all benchmarks:
+```bash
+cd backend
+npm run bench:merkle       # Generates Merkle charts and CSV
+npm run test:outage        # Generates DDIL outage simulation metrics and chart
+npm run eval:forecast      # Evaluates rolling-origin forecasting MAPE
+npm run eval:degradation   # Re-runs Arrhenius threshold sensitivity sweep
+```
 
 ---
 
-## 6. API reference (summary)
+## 6. Honest Technical Limitations & Scope
 
-All routes except `/api/auth/login` and `/api/health` require
-`Authorization: Bearer <token>`.
-
-| Method & path | Who | Purpose |
-|---|---|---|
-| `POST /api/auth/login` | anyone | returns `{ token, user }` |
-| `GET /api/lots` | any | list lots (scoped to own org unless Commander) |
-| `POST /api/lots/register` | OrdnanceFactory | chaincode `registerLot` |
-| `POST /api/lots/issue` | OrdnanceFactory, Depot | chaincode `issueLot` |
-| `POST /api/lots/transfer` | Depot, FieldUnit | chaincode `transferLot` |
-| `POST /api/lots/consume` | FieldUnit | chaincode `recordConsumption` (auto-runs `checkStockLevel`) |
-| `POST /api/lots/dispose` | Depot, FieldUnit | chaincode `disposeLot` |
-| `POST /api/lots/condition` | Depot, FieldUnit | chaincode `updateStorageCondition` (may auto-`flagForInspection`) |
-| `GET /api/lots/:lotID/history` | any | full ledger history for one lot |
-| `GET /api/lots/:lotID/qrcode` | any | QR code (data URL) encoding the lot ID |
-| `GET/POST /api/requisitions...` | any / Depot | replenishment queue + approvals |
-| `GET/PATCH /api/degradation/alerts...` | any | inspection alerts |
-| `GET /api/forecast` | any | moving-average + linear-regression forecasts |
-| `GET/PATCH /api/anomalies...` | any | rule-based anomaly flags |
-| `GET /api/dashboard/summary` \| `/stock` \| `/ledger` \| `/ledger/verify` | any | dashboard rollups + integrity check |
+In accordance with rigorous academic standards, the following architectural boundaries are explicitly documented:
+1. **Centralized Ledger Primitive**: The ledger is append-only and cryptographically hash-chained via SHA-256 with Merkle checkpoints, but runs on MongoDB rather than a Byzantine Fault Tolerant (BFT) decentralized consensus network (e.g., Raft or PBFT in Hyperledger Fabric). Collision resolution relies on atomic document operations.
+2. **Whole-Lot Custody**: A lot moves in its entirety; partial-lot custody splits across multiple depots simultaneously are not supported in the current state machine.
+3. **Hardware Simulation**: Sensor telemetry and QR/barcode scanning are simulated in software rather than interfacing with physical LoRaWAN/RFID hardware.
+4. **Advisory ML Scoring**: The Isolation Forest scoring is strictly non-blocking and advisory. High anomaly scores surface visual indicators on commander consoles but never unilaterally abort field ammunition dispatches.
 
 ---
 
-## 7. Design decisions & explicit scope simplifications
+## 7. License & Credits
 
-Stated up front so nothing here looks accidental in a review:
-
-- **Single writer, no consensus.** The ledger is append-only and
-  hash-chained, but it runs on one MongoDB instance rather than a
-  multi-peer network. Write ordering is serialized with a short
-  retry-on-collision loop (`Ledger.addBlock`), not distributed consensus.
-  This is the single biggest simplification versus real Fabric/blockchain
-  deployments and is the first thing to call out if asked "is this really a
-  blockchain?" — it is a tamper-evident log with the same hash-chain
-  integrity property, not a decentralized one.
-- **Whole-lot movement.** `issueLot`/`transferLot` move a lot's entire
-  remaining quantity to a new holder; splitting a lot into two custodians
-  isn't supported. Register lots at whatever granularity your demo needs
-  instead.
-- **RFID/QR, IoT sensors** are simulated (manual entry / a background
-  timer), not read from real hardware — this matches the original brief's
-  explicit scope.
-- **Forecasting and degradation scoring are deliberately non-ML** — a
-  3-month moving average, an OLS linear regression, and a plain
-  Arrhenius-style formula, all picked so their output can be explained on a
-  whiteboard.
-- **Anomaly detection is rule-based, not ML-based** — by design, so it
-  doesn't duplicate the ML-over-blockchain-transactions approach already
-  covered by prior work.
-
-## 8. Explicitly out of scope (unchanged from the original brief)
-
-Zero-knowledge proofs, real GPS/live shipment tracking, computer vision,
-real IoT hardware, multi-chain/cross-chain bridges, "digital twin" framing.
-
----
-
-## 9. Suggested three-way ownership split
-
-- **Student A** — `backend/blockchain/` (Ledger + smartContracts), `models/`,
-  `middleware/` — the ledger and chaincode-equivalent core.
-- **Student B** — `backend/services/` (degradation, forecasting, anomaly
-  rules, sensor simulator, QR) + `backend/routes/` — the analytics and API
-  surface.
-- **Student C** — `frontend/` — the React dashboard.
-
-## 10. Testing notes
-
-- `backend/scripts/testLogic.js` (`npm run test:logic`) exercises the
-  degradation formula, forecasting math, and ledger hashing/tamper-detection
-  **without needing a database** — useful for a quick CI-style check.
-- Full integration testing (registering/issuing/consuming lots through the
-  live API) requires a running MongoDB instance; point `MONGO_URI` at one
-  and run through the walkthrough in §5.
-- `npm run build` in `frontend/` produces a clean production bundle with no
-  compile errors.
+Developed as part of the Advanced Ammunition Management & Logistics Ledger Project.
+All cryptographic and algorithmic implementations strictly adhere to RFC 6962 and academic standards.

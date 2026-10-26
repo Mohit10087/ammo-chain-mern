@@ -1,0 +1,50 @@
+graph TB
+    subgraph "Client Layer (React / Vite PWA)"
+        UI["Tactical Dispatch Dashboard<br/>(Roles: Factory, Depot, Unit, Commander)"]
+        WC["Web Crypto Subsystem<br/>- In-Browser Merkle Proof Verifier<br/>- HMAC-SHA256 Request Signer"]
+        IDB["IndexedDB Offline Store<br/>(DDIL Store-and-Forward Queue)"]
+        UI <--> WC
+        UI <--> IDB
+    end
+
+    subgraph "API & Orchestration Layer (Node.js / Express)"
+        AUTH["JWT & Role RBAC Middleware"]
+        ROUTES["API Routes<br/>/api/lots, /api/sync, /api/anomalies, /api/forecast"]
+        SC["Smart Contracts Engine<br/>(State Transitions & Invariants)"]
+        LEDGER["Ledger Module<br/>(SHA-256 Hash Chaining)"]
+        MERKLE["Merkle Tree Service<br/>(RFC 6962 Domain Separation)"]
+        SYNC["DDIL Sync Engine<br/>(Sequence Check & Reconciliation)"]
+        RULES["Rule-Based Anomaly Engine"]
+
+        AUTH --> ROUTES
+        ROUTES --> SC
+        ROUTES --> SYNC
+        SC --> LEDGER
+        SC --> MERKLE
+        SC --> RULES
+    end
+
+    subgraph "Microservice Layer (Python / FastAPI)"
+        ML_SVC["FastAPI Microservice<br/>(:8000/score, :8000/health)"]
+        ISO["Isolation Forest Scorer<br/>(16 Contextual Features)"]
+        EXP["Explainability Engine<br/>(Distributional Z-Score Ranking)"]
+        ML_SVC --> ISO
+        ISO --> EXP
+    end
+
+    subgraph "Persistence Layer (MongoDB)"
+        DB_BLOCKS[("Blocks Collection<br/>(Tamper-Evident Ledger)")]
+        DB_LOTS[("Lots Collection<br/>(Current World State & Merkle Roots)")]
+        DB_FLAGS[("AnomalyFlags Collection<br/>(Source, Score & Top Features)")]
+        DB_DEVICE[("DeviceState Collection<br/>(Monotonic Sync Sequences)")]
+        DB_HIST[("ConsumptionHistory Collection")]
+    end
+
+    UI -->|HTTP / REST| AUTH
+    IDB -->|Batched POST /api/sync| AUTH
+    RULES -.->|800ms Abort Timeout| ML_SVC
+    LEDGER --> DB_BLOCKS
+    SC --> DB_LOTS
+    RULES --> DB_FLAGS
+    SYNC --> DB_DEVICE
+    ROUTES --> DB_HIST

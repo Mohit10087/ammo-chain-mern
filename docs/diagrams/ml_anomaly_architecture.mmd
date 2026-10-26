@@ -1,0 +1,26 @@
+graph TD
+    TX["Incoming Transaction<br/>(ISSUE_LOT / TRANSFER_LOT)"] --> RULES["Deterministic Rule Engine<br/>- Duplicate Issue Window (&lt;10 min)<br/>- Transfer Quantity Spike (&gt;3x mean)<br/>- Unit Pattern Deviation (&gt;5 / 24h)"]
+    TX --> CTX["Ledger Context Aggregator<br/>- recentIssuesSameType (10)<br/>- minutesSinceLastLotEvent<br/>- eventsLastHour / eventsLastDay"]
+
+    CTX --> TIMEOUT{"POST /score<br/>AbortSignal.timeout(800ms)"}
+
+    subgraph "Python ML Microservice (FastAPI)"
+        TIMEOUT -->|HTTP 200| IF["Isolation Forest Model<br/>(Unsupervised, 100 Trees)"]
+        IF --> SCORE["Anomaly Score S in [0, 1]"]
+        SCORE --> ZSCORE["Explainability Engine<br/>Feature z-score ranking<br/>Top 3 deviating features"]
+    end
+
+    TIMEOUT -->|Timeout / Offline| FALLBACK["Silent Graceful Fallback<br/>(Return null)"]
+
+    RULES --> MERGE{"Dual-Layer Fusion"}
+    ZSCORE --> MERGE
+    FALLBACK --> MERGE
+
+    MERGE -->|Both Fired| FLAG_BOTH["AnomalyFlag (source: 'both')<br/>High Confidence Confirmation"]
+    MERGE -->|ML Only Fired| FLAG_ML["AnomalyFlag (source: 'ml')<br/>Catches Burst / Subtle Attacks"]
+    MERGE -->|Rules Only Fired| FLAG_RULE["AnomalyFlag (source: 'rules')<br/>Deterministic Safeguard"]
+    MERGE -->|Neither Fired| CLEAN["Clean Transaction Passed"]
+
+    FLAG_BOTH --> DASH["Commander / Dispatch Dashboard<br/>Advisory Non-Blocking Alert"]
+    FLAG_ML --> DASH
+    FLAG_RULE --> DASH

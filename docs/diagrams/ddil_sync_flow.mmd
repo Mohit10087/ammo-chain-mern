@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    participant FU as Field Unit Client (Browser / PWA)
+    participant IDB as Client IndexedDB Queue
+    participant SVR as Central Node / Server
+    participant LEDGER as Blockchain Ledger (MongoDB)
+
+    Note over FU,IDB: Tactical Outage Phase (DDIL Disconnected)
+    FU->>FU: User records ammunition issue / consumption
+    FU->>FU: Increment device seq: s = s + 1
+    FU->>FU: Sign event: HMAC-SHA256(key, eventPayload)
+    FU->>IDB: Append signed event to offline queue
+
+    Note over FU,SVR: Connectivity Restored (Auto-Sync Triggered)
+    FU->>IDB: Read un-synced events ordered by seq
+    FU->>SVR: POST /api/sync/batch { deviceId, events, batchId }
+
+    Note over SVR: Server Verification & Merge
+    SVR->>SVR: 1. Verify HMAC signatures against device pre-shared key
+    SVR->>SVR: 2. Check duplicate batchId / eventIds (Idempotency)
+    SVR->>SVR: 3. Monotonic sequence gap check (seq == expectedSeq)
+    
+    alt World-State Conflict (e.g. Lot already transferred elsewhere)
+        SVR->>LEDGER: Add CONFLICT_DETECTED Block (Audit record, no silent drop)
+        SVR-->>FU: Status 200 with conflict report
+    else Clean State Validation
+        SVR->>LEDGER: Add transaction Block(s) with OFFLINE_SYNC metadata
+        SVR->>SVR: Update DeviceState (lastSeq = s, syncedAt = now)
+        SVR-->>FU: Status 200 { syncedCount, status: 'PROCESSED' }
+    end
+
+    FU->>IDB: Mark events as synced or purge from local queue

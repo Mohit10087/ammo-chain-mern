@@ -1,0 +1,44 @@
+graph TD
+    subgraph "Per-Lot Transaction History (N=5 Leaves)"
+        L0["Leaf 0: H(0x00 || H(Block 0))"]
+        L1["Leaf 1: H(0x00 || H(Block 1))"]
+        L2["Leaf 2: H(0x00 || H(Block 2))"]
+        L3["Leaf 3: H(0x00 || H(Block 3))"]
+        L4["Leaf 4: H(0x00 || H(Block 4))"]
+    end
+
+    subgraph "Layer 1 Internal Nodes"
+        N01["Node 0-1: H(0x01 || L0 || L1)"]
+        N23["Node 2-3: H(0x01 || L2 || L3)"]
+        N4P["Promoted Leaf 4: L4<br/>(RFC 6962 Odd Promotion)"]
+    end
+
+    subgraph "Layer 2 Internal Nodes"
+        N03["Node 0-3: H(0x01 || N01 || N23)"]
+        N4PP["Promoted Node: N4P"]
+    end
+
+    subgraph "On-Chain Anchor"
+        ROOT["Merkle Root Checkpoint<br/>H(0x01 || N03 || N4PP)<br/>Anchored in Block #K"]
+    end
+
+    L0 --> N01
+    L1 --> N01
+    L2 --> N23
+    L3 --> N23
+    L4 --> N4P
+
+    N01 --> N03
+    N23 --> N03
+    N4P --> N4PP
+
+    N03 --> ROOT
+    N4PP --> ROOT
+
+    classDef audit fill:#3f5c48,stroke:#6f9c7f,stroke-width:2px;
+    classDef target fill:#6b5227,stroke:#d19a3d,stroke-width:2px;
+    classDef root fill:#3d6178,stroke:#5b8ba8,stroke-width:2px;
+
+    class L2 target;
+    class L3,N01,N4PP audit;
+    class ROOT root;
