@@ -21,8 +21,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 rng = np.random.default_rng(42)
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
-os.makedirs(OUT, exist_ok=True)
+OUT = os.path.dirname(os.path.abspath(__file__))
 
 AMMO = {  # type: (base monthly consumption per unit, typical issue qty per transaction)
     "5.56mm": (9000, 4000),
@@ -137,6 +136,46 @@ for k in range(40):                                    # oversized issue
 tx = pd.concat([normal, pd.DataFrame(inj, columns=normal.columns)]).sort_values("timestamp").reset_index(drop=True)
 tx["tx_id"] = np.arange(1, len(tx) + 1)
 tx.to_csv(f"{OUT}/transactions.csv", index=False)
+
+# ---------------------------------------------------------------- 4b. transactions_v2 (subtler anomalies)
+rng_v2 = np.random.default_rng(4242)
+max_tid = tx["tx_id"].max()
+inj_v2 = []
+
+# Subtler 1: Moderately oversized (1.85x to 2.75x typical - below rule cutoff of 3.0x)
+for _ in range(25):
+    lid = rng_v2.choice(lot_ids)
+    a = lots.loc[lid, "ammo_type"]
+    max_tid += 1
+    ts = t0 + pd.Timedelta(minutes=int(rng_v2.integers(0, DAYS * 24 * 60)))
+    qty = int(AMMO[a][1] * rng_v2.uniform(1.85, 2.75))
+    inj_v2.append([max_tid, ts, lid, a, "ISSUE_LOT", qty, 1, "moderately_oversized"])
+
+# Subtler 2: Off-hours issues (01:00 to 04:30 AM)
+for _ in range(25):
+    lid = rng_v2.choice(lot_ids)
+    a = lots.loc[lid, "ammo_type"]
+    max_tid += 1
+    day_offset = int(rng_v2.integers(0, DAYS))
+    night_minute = int(rng_v2.integers(60, 270))  # 1:00 AM to 4:30 AM
+    ts = pd.Timestamp("2026-04-01 00:00") + pd.Timedelta(days=day_offset, minutes=night_minute)
+    qty = int(max(10, rng_v2.lognormal(np.log(AMMO[a][1]), 0.25)))
+    inj_v2.append([max_tid, ts, lid, a, "ISSUE_LOT", qty, 1, "off_hours"])
+
+# Subtler 3: Burst pattern (3 rapid small issues on the same lot within 45 min)
+for _ in range(15):
+    lid = rng_v2.choice(lot_ids)
+    a = lots.loc[lid, "ammo_type"]
+    burst_start = t0 + pd.Timedelta(minutes=int(rng_v2.integers(0, DAYS * 24 * 60)))
+    for b in range(3):
+        max_tid += 1
+        ts = burst_start + pd.Timedelta(minutes=b * 14 + int(rng_v2.integers(1, 4)))
+        qty = int(AMMO[a][1] * 0.25)
+        inj_v2.append([max_tid, ts, lid, a, "ISSUE_LOT", qty, 1, "burst_pattern"])
+
+tx_v2 = pd.concat([tx, pd.DataFrame(inj_v2, columns=tx.columns)]).sort_values("timestamp").reset_index(drop=True)
+tx_v2["tx_id"] = np.arange(1, len(tx_v2) + 1)
+tx_v2.to_csv(f"{OUT}/transactions_v2.csv", index=False)
 
 # ================================================================= EVALUATION
 # ---- A. forecasting: rolling-origin on last 12 months, per (unit, ammo) series

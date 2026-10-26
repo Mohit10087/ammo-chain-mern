@@ -4,14 +4,23 @@ const anomalyFlagSchema = new mongoose.Schema(
   {
     rule: {
       type: String,
-      required: true,
-      enum: ['DUPLICATE_ISSUE_WINDOW', 'TRANSFER_QUANTITY_SPIKE', 'UNIT_PATTERN_DEVIATION']
+      required: true
     },
     lotID: { type: String, default: null },
     unitId: { type: String, default: null },
     details: { type: mongoose.Schema.Types.Mixed, required: true },
     severity: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH'], default: 'MEDIUM' },
-    status: { type: String, enum: ['OPEN', 'REVIEWED', 'DISMISSED'], default: 'OPEN' }
+    status: { type: String, enum: ['OPEN', 'REVIEWED', 'DISMISSED'], default: 'OPEN' },
+
+    // Machine Learning Anomaly Detection Extensions (Phase 3)
+    source: {
+      type: String,
+      enum: ['rules', 'ml', 'both'],
+      default: 'rules'
+    },
+    mlScore: { type: Number, default: null },
+    topFeatures: { type: mongoose.Schema.Types.Mixed, default: null },
+    reason: { type: String, default: null }
   },
   { timestamps: true }
 );
