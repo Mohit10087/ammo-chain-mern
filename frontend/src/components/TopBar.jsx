@@ -60,10 +60,18 @@ export default function TopBar() {
     };
     const handleOffline = () => setIsOnline(false);
     const handleQueueChange = () => refreshQueueCount();
+    const handleDdilChanged = () => {
+      const isCut = localStorage.getItem('ordnance_simulated_ddil') === 'true';
+      setSimulatedOffline(isCut);
+      if (!isCut) {
+        triggerSync();
+      }
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('ordnance_offline_queue_changed', handleQueueChange);
+    window.addEventListener('ordnance_ddil_state_changed', handleDdilChanged);
 
     return () => {
       cancelled = true;
@@ -71,6 +79,7 @@ export default function TopBar() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('ordnance_offline_queue_changed', handleQueueChange);
+      window.removeEventListener('ordnance_ddil_state_changed', handleDdilChanged);
     };
   }, [refreshQueueCount, triggerSync]);
 

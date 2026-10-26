@@ -64,16 +64,27 @@ export default function OfflineConsole() {
     return () => window.removeEventListener('ordnance_offline_queue_changed', handleQueueChange);
   }, [loadLots, loadQueue]);
 
-  const toggleOutage = () => {
+  const toggleOutage = async () => {
     const next = !isOutage;
     setIsOutage(next);
     localStorage.setItem('ordnance_simulated_ddil', String(next));
     window.dispatchEvent(new Event('ordnance_ddil_state_changed'));
-    setSuccess(
-      next
-        ? '⚠️ Tactical blackout simulation activated: Central connection cut. All actions will queue into IndexedDB.'
-        : '🟢 Central connection restored. You may now synchronize queued events with the server.'
-    );
+
+    if (!next) {
+      const queued = await getQueuedEvents();
+      if (queued.length > 0) {
+        setSuccess('🟢 Central connection restored! Automatically synchronizing tactical offline queue with central ledger...');
+        try {
+          await handleSyncNow();
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        setSuccess('🟢 Central connection restored. Central ledger is online.');
+      }
+    } else {
+      setSuccess('⚠️ Tactical blackout simulation activated: Central connection cut. All actions will queue into IndexedDB.');
+    }
   };
 
   const selectedLot = lots.find((l) => l.lotID === selectedLotID);

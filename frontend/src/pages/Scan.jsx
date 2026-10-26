@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { getQueuedEvents, syncOfflineQueue } from '../utils/offlineQueue';
 
 export default function Scan() {
   const { actor } = useAuth();
@@ -100,6 +101,12 @@ export default function Scan() {
 
     try {
       if (!effectiveLotID) throw new Error('Please select or specify a valid Lot ID.');
+
+      // Pre-action barrier: Ensure any prior offline events in IndexedDB are committed FIRST
+      const pendingOffline = await getQueuedEvents();
+      if (pendingOffline.length > 0) {
+        await syncOfflineQueue(api);
+      }
 
       let response;
       if (action === 'ISSUE_TO_DEPOT') {

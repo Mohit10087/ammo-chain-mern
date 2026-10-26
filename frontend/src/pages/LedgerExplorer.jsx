@@ -61,28 +61,73 @@ export default function LedgerExplorer() {
         <table>
           <thead>
             <tr>
-              <th>#</th>
-              <th>Timestamp</th>
+              <th style={{ width: 45 }}>#</th>
+              <th>Timestamps</th>
               <th>Tx Type</th>
-              <th>Lot</th>
-              <th>Submitted By</th>
-              <th>Hash</th>
+              <th>Lot ID</th>
+              <th>Provenance / Device</th>
+              <th>Payload Details</th>
+              <th>Block Hash</th>
             </tr>
           </thead>
           <tbody>
             {blocks.map((b) => (
               <tr key={b.hash}>
-                <td className="mono">{b.index}</td>
+                <td className="mono" style={{ fontWeight: 700 }}>#{b.index}</td>
                 <td className="mono" style={{ fontSize: 11 }}>
-                  {new Date(b.timestamp).toLocaleString()}
+                  <div>{new Date(b.timestamp).toLocaleString()}</div>
+                  {b.capturedAt && (
+                    <div style={{ marginTop: 2 }}>
+                      <span
+                        style={{
+                          background: 'rgba(255, 152, 0, 0.2)',
+                          color: '#ffb74d',
+                          border: '1px solid rgba(255, 152, 0, 0.4)',
+                          padding: '1px 5px',
+                          borderRadius: 2,
+                          fontSize: 10,
+                          fontWeight: 700
+                        }}
+                      >
+                        ⚡ Captured: {new Date(b.capturedAt).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  )}
                 </td>
-                <td>{b.txType}</td>
+                <td style={{ fontWeight: 600 }}>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      padding: '2px 6px',
+                      borderRadius: 2,
+                      fontSize: 11,
+                      fontFamily: 'var(--font-mono)',
+                      background:
+                        b.txType === 'CONFLICT_DETECTED'
+                          ? 'rgba(193, 74, 58, 0.2)'
+                          : b.txType === 'MERKLE_CHECKPOINT'
+                          ? 'rgba(91, 139, 168, 0.2)'
+                          : 'var(--panel-raised)',
+                      border: '1px solid var(--border)'
+                    }}
+                  >
+                    {b.txType}
+                  </span>
+                </td>
                 <td className="mono">{b.lotID ? <Link to={`/lots/${b.lotID}`}>{b.lotID}</Link> : '—'}</td>
                 <td className="muted" style={{ fontSize: 12 }}>
-                  {b.submittedByOrg}/{b.submittedByUser}
+                  <div>{b.submittedByOrg}/{b.submittedByUser}</div>
+                  {b.deviceId && (
+                    <div className="mono" style={{ fontSize: 10, color: 'var(--accent-steel)' }}>
+                      Dev: {b.deviceId}
+                    </div>
+                  )}
+                </td>
+                <td className="mono muted" style={{ fontSize: 10, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {JSON.stringify(b.payload)}
                 </td>
                 <td className="mono" style={{ fontSize: 11 }} title={b.hash}>
-                  {b.hash.slice(0, 14)}&hellip;
+                  {b.hash.slice(0, 12)}&hellip;
                 </td>
               </tr>
             ))}

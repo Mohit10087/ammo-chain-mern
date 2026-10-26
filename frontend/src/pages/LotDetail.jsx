@@ -199,9 +199,18 @@ export default function LotDetail() {
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, fontSize: 12, marginBottom: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 8, fontSize: 12, marginBottom: 8 }}>
               <span className="muted">Block Hash:</span>
               <span className="mono" style={{ wordBreak: 'break-all' }}>{proofResult.blockHash}</span>
+
+              {selectedBlock?.capturedAt && (
+                <>
+                  <span className="muted">Tactical Origin:</span>
+                  <span className="mono" style={{ color: 'var(--accent-amber)' }}>
+                    ⚡ Captured offline at {new Date(selectedBlock.capturedAt).toLocaleString()} &middot; Device: {selectedBlock.deviceId || 'Tactical Node'}
+                  </span>
+                </>
+              )}
 
               <span className="muted">Leaf Hash (0x00):</span>
               <span className="mono" style={{ wordBreak: 'break-all' }}>{proofResult.leafHash}</span>
