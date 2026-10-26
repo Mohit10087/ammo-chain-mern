@@ -2,6 +2,8 @@ const express = require('express');
 const Lot = require('../models/Lot');
 const Ledger = require('../blockchain/Ledger');
 const smartContracts = require('../blockchain/smartContracts');
+const merkle = require('../blockchain/merkle');
+const merkleService = require('../services/merkleService');
 const qrService = require('../services/qrService');
 const { authenticate, requireOrg } = require('../middleware/auth');
 
@@ -47,6 +49,36 @@ router.get('/:lotID/history', async (req, res, next) => {
   try {
     const history = await Ledger.getHistory(req.params.lotID);
     res.json({ lotID: req.params.lotID, history });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/lots/:lotID/merkle-root - get root and tree metadata
+router.get(['/:lotID/merkle-root', '/:lotID/merkle'], async (req, res, next) => {
+  try {
+    const info = await merkleService.getLotMerkleRoot(req.params.lotID);
+    res.json(info);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/lots/:lotID/proof/:blockIndex - O(log n) inclusion proof for a block
+router.get(['/:lotID/proof/:blockIndex', '/:lotID/merkle/proof/:blockIndex'], async (req, res, next) => {
+  try {
+    const proofData = await merkleService.getProofForBlock(req.params.lotID, req.params.blockIndex);
+    res.json(proofData);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/lots/:lotID/checkpoint - on-demand MERKLE_CHECKPOINT block creation
+router.post('/:lotID/checkpoint', requireOrg('OrdnanceFactory', 'Depot', 'Commander'), async (req, res, next) => {
+  try {
+    const result = await merkleService.createCheckpoint(req.actor, req.params.lotID);
+    res.status(201).json(result);
   } catch (err) {
     next(err);
   }

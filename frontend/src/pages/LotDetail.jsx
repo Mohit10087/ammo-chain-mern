@@ -5,6 +5,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import LedgerStrip from '../components/LedgerStrip';
+import { verifyProofInBrowser } from '../utils/webCryptoMerkle';
 
 export default function LotDetail() {
   const { lotID } = useParams();
@@ -17,19 +18,28 @@ export default function LotDetail() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
+  // Merkle Audit Layer state
+  const [merkleData, setMerkleData] = useState(null);
+  const [selectedBlock, setSelectedBlock] = useState(null);
+  const [proofResult, setProofResult] = useState(null);
+  const [verifyingProof, setVerifyingProof] = useState(false);
+  const [proofError, setProofError] = useState(null);
+
   const isHolder = lot && lot.currentHolderOrg === actor.org && (actor.org === 'OrdnanceFactory' || lot.currentHolderId === actor.depotId);
 
   const load = useCallback(async () => {
     try {
-      const [lotRes, historyRes, qrRes, readingsRes] = await Promise.all([
+      const [lotRes, historyRes, qrRes, readingsRes, merkleRes] = await Promise.all([
         api.get(`/lots/${lotID}`),
         api.get(`/lots/${lotID}/history`),
         api.get(`/lots/${lotID}/qrcode`),
-        api.get(`/degradation/readings/${lotID}`)
+        api.get(`/degradation/readings/${lotID}`),
+        api.get(`/lots/${lotID}/merkle-root`).catch(() => null)
       ]);
       setLot(lotRes.lot);
       setHistory(historyRes.history);
       setQrCode(qrRes.qrCode);
+      setMerkleData(merkleRes);
       setReadings(
         readingsRes.readings.map((r) => ({ ...r, t: new Date(r.recordedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }))
       );
@@ -46,6 +56,35 @@ export default function LotDetail() {
     setSuccess(message);
     setError(null);
     load();
+  }
+
+  async function verifyBlock(block) {
+    setSelectedBlock(block);
+    setVerifyingProof(true);
+    setProofError(null);
+    setProofResult(null);
+    try {
+      const proofRes = await api.get(`/lots/${lotID}/proof/${block.index}`);
+      const root = proofRes.root;
+      const browserResult = await verifyProofInBrowser(block.hash, proofRes.proof, root);
+      setProofResult({
+        ...proofRes,
+        browserVerification: browserResult
+      });
+    } catch (err) {
+      setProofError(err.message);
+    } finally {
+      setVerifyingProof(false);
+    }
+  }
+
+  async function handleCreateCheckpoint() {
+    try {
+      await api.post(`/lots/${lotID}/checkpoint`);
+      afterAction('Merkle checkpoint successfully anchored on-chain.');
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   if (!lot) {
@@ -104,8 +143,90 @@ export default function LotDetail() {
       </div>
 
       <div className="panel">
-        <div className="panel-title">Ledger History (hash-chained, tamper-evident)</div>
-        <LedgerStrip blocks={history} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <div className="panel-title" style={{ margin: 0 }}>Ledger History & Merkle Audit Layer</div>
+            <p className="muted" style={{ fontSize: 12, margin: '2px 0 0 0' }}>
+              Select any block below to generate an O(log n) cryptographic inclusion proof and verify it in your browser.
+            </p>
+          </div>
+          {['OrdnanceFactory', 'Depot', 'Commander'].includes(actor.org) && (
+            <button className="btn btn-secondary btn-sm" onClick={handleCreateCheckpoint}>
+              Anchor Merkle Checkpoint
+            </button>
+          )}
+        </div>
+
+        <LedgerStrip
+          blocks={history}
+          selectedIndex={selectedBlock?.index}
+          onSelectBlock={verifyBlock}
+        />
+
+        {verifyingProof && (
+          <div style={{ padding: '12px', background: 'var(--panel-raised)', marginTop: 12, borderRadius: 4 }}>
+            <span className="mono" style={{ fontSize: 12 }}>Generating proof and computing Web Crypto SHA-256 hashes&hellip;</span>
+          </div>
+        )}
+
+        {proofError && (
+          <div className="error-banner" style={{ marginTop: 12 }}>
+            {proofError}
+          </div>
+        )}
+
+        {proofResult && (
+          <div style={{ marginTop: 14, padding: 14, background: 'var(--panel-raised)', border: '1px solid var(--border-strong)', borderRadius: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className="mono" style={{ fontWeight: 600 }}>Block #{proofResult.blockIndex} Inclusion Proof</span>
+                <span
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: 3,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    background: proofResult.browserVerification?.valid ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
+                    color: proofResult.browserVerification?.valid ? '#4caf50' : '#f44336',
+                    border: `1px solid ${proofResult.browserVerification?.valid ? '#4caf50' : '#f44336'}`
+                  }}
+                >
+                  {proofResult.browserVerification?.valid ? '\u2713 VERIFIED IN-BROWSER (Web Crypto API)' : '\u2717 TAMPER DETECTED / INVALID'}
+                </span>
+              </div>
+              <span className="muted mono" style={{ fontSize: 11 }}>
+                Proof Size: {proofResult.proofSizeBytes} bytes ({proofResult.proof?.length} sibling hashes) &middot; Verified in {proofResult.browserVerification?.durationMs} ms
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, fontSize: 12, marginBottom: 8 }}>
+              <span className="muted">Block Hash:</span>
+              <span className="mono" style={{ wordBreak: 'break-all' }}>{proofResult.blockHash}</span>
+
+              <span className="muted">Leaf Hash (0x00):</span>
+              <span className="mono" style={{ wordBreak: 'break-all' }}>{proofResult.leafHash}</span>
+
+              <span className="muted">Merkle Root:</span>
+              <span className="mono" style={{ wordBreak: 'break-all', color: 'var(--accent-olive, #4caf50)' }}>{proofResult.root}</span>
+            </div>
+
+            {proofResult.proof?.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div className="muted" style={{ fontSize: 11, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Cryptographic Proof Path (Siblings Leaf &rarr; Root):
+                </div>
+                <div style={{ maxHeight: 130, overflowY: 'auto', background: 'var(--panel)', padding: 8, border: '1px solid var(--border)', borderRadius: 3 }}>
+                  {proofResult.proof.map((p, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 10, fontSize: 11, padding: '2px 0', borderBottom: '1px solid #222' }}>
+                      <span className="mono muted">L{idx + 1} ({p.position})</span>
+                      <span className="mono" style={{ wordBreak: 'break-all' }}>{p.hash}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {readings.length > 0 && (

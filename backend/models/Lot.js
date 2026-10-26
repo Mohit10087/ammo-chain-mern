@@ -39,7 +39,12 @@ const lotSchema = new mongoose.Schema(
 
     // Pointer to the most recent block hash affecting this lot, so the UI can
     // jump straight into the ledger history for verification.
-    lastBlockHash: { type: String, default: null }
+    lastBlockHash: { type: String, default: null },
+
+    // Per-Lot Merkle Tree Audit Layer (Innovation A)
+    merkleRoot: { type: String, default: null },
+    merkleTreeSize: { type: Number, default: 0 },
+    merkleUpdatedAt: { type: Date, default: null }
   },
   { timestamps: true }
 );

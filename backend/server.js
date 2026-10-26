@@ -29,6 +29,31 @@ app.use('/api/forecast', forecastRoutes);
 app.use('/api/anomalies', anomalyRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
+const { authenticate } = require('./middleware/auth');
+const merkle = require('./blockchain/merkle');
+
+// POST /api/verify-proof - stateless Merkle proof verification
+app.post('/api/verify-proof', authenticate, (req, res) => {
+  const { leafHash, blockHash, proof, root } = req.body;
+  if (!root || !Array.isArray(proof) || (!leafHash && !blockHash)) {
+    return res.status(400).json({ error: 'leafHash (or blockHash), proof array, and root are required' });
+  }
+
+  const targetLeaf = leafHash || merkle.hashLeaf(blockHash);
+  const startTime = process.hrtime.bigint();
+  const valid = merkle.verifyProof(targetLeaf, proof, root);
+  const elapsedNanos = Number(process.hrtime.bigint() - startTime);
+
+  return res.json({
+    valid,
+    leafHash: targetLeaf,
+    root,
+    proofLength: proof.length,
+    verificationTimeNanos: elapsedNanos,
+    verificationTimeMicros: Math.round(elapsedNanos / 1000)
+  });
+});
+
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 app.use(errorHandler);
 

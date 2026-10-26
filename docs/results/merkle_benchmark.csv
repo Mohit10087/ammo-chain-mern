@@ -1,0 +1,6 @@
+history_size_n,linear_time_us,merkle_time_us,speedup_factor,proof_size_bytes,theoretical_max_bytes,proof_steps
+10,28.04,13.17,2.1,64,128,2
+100,67.13,5.38,12.5,128,224,4
+1000,493,4.5,109.6,256,320,8
+10000,4801.42,3.96,1212.5,256,448,8
+100000,47801,5,9560.2,320,544,10

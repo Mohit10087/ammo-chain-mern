@@ -27,6 +27,7 @@ const SensorReading = require('../models/SensorReading');
 const Ledger = require('./Ledger');
 const degradationService = require('../services/degradationService');
 const anomalyService = require('../services/anomalyService');
+const merkleService = require('../services/merkleService');
 
 class ContractError extends Error {
   constructor(message, statusCode = 400) {
@@ -94,6 +95,7 @@ async function registerLot(actor, { lotID, ammoType, caliber, quantity, manufact
 
   lot.lastBlockHash = block.hash;
   await lot.save();
+  await merkleService.maybeAutoCheckpoint(actor, lot.lotID);
   return lot;
 }
 
@@ -134,6 +136,7 @@ async function issueLot(actor, { lotID, toOrg, toId }) {
   });
   lot.lastBlockHash = block.hash;
   await lot.save();
+  await merkleService.maybeAutoCheckpoint(actor, lot.lotID);
 
   await anomalyService.checkIssueAnomalies({ lot, fromOrg, fromId, toOrg, toId });
 
@@ -167,6 +170,7 @@ async function transferLot(actor, { lotID, toId }) {
   });
   lot.lastBlockHash = block.hash;
   await lot.save();
+  await merkleService.maybeAutoCheckpoint(actor, lot.lotID);
 
   await anomalyService.checkIssueAnomalies({ lot, fromOrg: actor.org, fromId, toOrg: actor.org, toId });
 
@@ -198,6 +202,7 @@ async function recordConsumption(actor, { lotID, quantity }) {
   });
   lot.lastBlockHash = block.hash;
   await lot.save();
+  await merkleService.maybeAutoCheckpoint(actor, lot.lotID);
 
   // Auto-replenishment check runs against the depot that supplied this lot.
   const depotToCheck = lot.sourceDepotId;
@@ -233,6 +238,7 @@ async function disposeLot(actor, { lotID, reason }) {
   });
   lot.lastBlockHash = block.hash;
   await lot.save();
+  await merkleService.maybeAutoCheckpoint(actor, lot.lotID);
   return lot;
 }
 
@@ -328,6 +334,7 @@ async function updateStorageCondition(actor, { lotID, temperatureC, humidityPct 
   });
   lot.lastBlockHash = block.hash;
   await lot.save();
+  await merkleService.maybeAutoCheckpoint(actor, lot.lotID);
 
   const alertThreshold = Number(process.env.DEGRADATION_RISK_ALERT_THRESHOLD || 70);
   let alert = null;
@@ -361,13 +368,19 @@ async function flagForInspection({ lotID, riskScore, temperatureC, humidityPct, 
     reason
   });
 
-  await Ledger.addBlock({
+  const block = await Ledger.addBlock({
     txType: 'FLAG_FOR_INSPECTION',
     lotID,
     payload: { riskScore, temperatureC, humidityPct, daysInStorage, reason },
     submittedByOrg: 'System',
     submittedByUser: 'degradation-monitor'
   });
+
+  if (lot) {
+    lot.lastBlockHash = block.hash;
+    await lot.save();
+    await merkleService.maybeAutoCheckpoint({ org: 'System', username: 'degradation-monitor' }, lotID);
+  }
 
   return alert;
 }
@@ -382,5 +395,6 @@ module.exports = {
   checkStockLevel,
   approveRequisition,
   updateStorageCondition,
-  flagForInspection
+  flagForInspection,
+  checkpointLotMerkle: (actor, lotID) => merkleService.createCheckpoint(actor, lotID)
 };

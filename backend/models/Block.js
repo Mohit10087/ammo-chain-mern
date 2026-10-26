@@ -25,7 +25,8 @@ const blockSchema = new mongoose.Schema(
         'FLAG_FOR_INSPECTION',
         'CREATE_REQUISITION',
         'APPROVE_REQUISITION',
-        'ANOMALY_FLAGGED'
+        'ANOMALY_FLAGGED',
+        'MERKLE_CHECKPOINT'
       ]
     },
 
