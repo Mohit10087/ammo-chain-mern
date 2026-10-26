@@ -2,11 +2,12 @@
   "name": "ammo-chain-mern",
   "version": "1.0.0",
   "description": "Blockchain-Enabled Smart-Contract-Based Ammunition Management System",
+  "main": "server.js",
   "scripts": {
     "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
-    "start": "node backend/server.js",
-    "dev:backend": "npm run dev --prefix backend",
-    "dev:frontend": "npm run dev --prefix frontend"
+    "postinstall": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "keywords": [
     "mern",
