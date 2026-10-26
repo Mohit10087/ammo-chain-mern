@@ -61,7 +61,18 @@ function computeHash({ index, timestamp, txType, lotID, payload, previousHash, s
  * function on its own - business rules always live in smartContracts.js,
  * which calls this after validating a transaction.
  */
-async function addBlock({ txType, lotID, payload, submittedByOrg, submittedByUser }) {
+async function addBlock({
+  txType,
+  lotID,
+  payload,
+  submittedByOrg,
+  submittedByUser,
+  capturedAt,
+  syncedAt,
+  deviceId,
+  syncBatchId,
+  eventId
+}) {
   // Serialize writers with a short retry loop instead of a DB transaction,
   // since a single ordered writer is a documented simplification (see file
   // header). This is sufficient for the demo's write volume.
@@ -82,6 +93,11 @@ async function addBlock({ txType, lotID, payload, submittedByOrg, submittedByUse
         payload,
         submittedByOrg,
         submittedByUser,
+        capturedAt: capturedAt || null,
+        syncedAt: syncedAt || null,
+        deviceId: deviceId || null,
+        syncBatchId: syncBatchId || null,
+        eventId: eventId || null,
         previousHash,
         hash
       });

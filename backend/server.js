@@ -13,6 +13,7 @@ const degradationRoutes = require('./routes/degradationRoutes');
 const forecastRoutes = require('./routes/forecastRoutes');
 const anomalyRoutes = require('./routes/anomalyRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const syncRoutes = require('./routes/syncRoutes');
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api/degradation', degradationRoutes);
 app.use('/api/forecast', forecastRoutes);
 app.use('/api/anomalies', anomalyRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/sync', syncRoutes);
 
 const { authenticate } = require('./middleware/auth');
 const merkle = require('./blockchain/merkle');

@@ -11,7 +11,9 @@
     "test:logic": "node scripts/testLogic.js",
     "test:merkle": "node scripts/testMerkle.js",
     "bench:merkle": "node scripts/benchMerkle.js",
-    "test": "node scripts/testLogic.js && node scripts/testMerkle.js"
+    "test:offline": "node scripts/testOfflineSync.js",
+    "test:outage": "node scripts/simulateOutage.js",
+    "test": "node scripts/testLogic.js && node scripts/testMerkle.js && node scripts/testOfflineSync.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

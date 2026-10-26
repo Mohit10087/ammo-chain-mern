@@ -26,7 +26,9 @@ const blockSchema = new mongoose.Schema(
         'CREATE_REQUISITION',
         'APPROVE_REQUISITION',
         'ANOMALY_FLAGGED',
-        'MERKLE_CHECKPOINT'
+        'MERKLE_CHECKPOINT',
+        'CONFLICT_DETECTED',
+        'OFFLINE_SYNC_BATCH'
       ]
     },
 
@@ -38,6 +40,13 @@ const blockSchema = new mongoose.Schema(
 
     submittedByOrg: { type: String, required: true },
     submittedByUser: { type: String, required: true },
+
+    // DDIL Tactical Sync metadata (Innovation B)
+    capturedAt: { type: Date, default: null },
+    syncedAt: { type: Date, default: null },
+    deviceId: { type: String, default: null },
+    syncBatchId: { type: String, default: null },
+    eventId: { type: String, default: null, index: true },
 
     previousHash: { type: String, required: true },
     hash: { type: String, required: true }
