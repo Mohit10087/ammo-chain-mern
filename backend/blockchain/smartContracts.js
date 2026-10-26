@@ -325,20 +325,26 @@ async function updateStorageCondition(actor, { lotID, temperatureC, humidityPct 
   lot.lastConditionCheck = new Date();
   await lot.save();
 
-  const block = await Ledger.addBlock({
-    txType: 'UPDATE_STORAGE_CONDITION',
-    lotID,
-    payload: { temperatureC, humidityPct, daysInStorage, riskScore },
-    submittedByOrg: actor.org,
-    submittedByUser: actor.username
-  });
-  lot.lastBlockHash = block.hash;
-  await lot.save();
-  await merkleService.maybeAutoCheckpoint(actor, lot.lotID);
-
   const alertThreshold = Number(process.env.DEGRADATION_RISK_ALERT_THRESHOLD || 70);
+  const isHighRisk = riskScore >= alertThreshold;
+  const isManualOfficerAction = actor.org !== 'System';
+
+  // Only commit to immutable blockchain ledger if manually logged by an officer or triggering high risk
+  if (isManualOfficerAction || isHighRisk) {
+    const block = await Ledger.addBlock({
+      txType: 'UPDATE_STORAGE_CONDITION',
+      lotID,
+      payload: { temperatureC, humidityPct, daysInStorage, riskScore },
+      submittedByOrg: actor.org,
+      submittedByUser: actor.username
+    });
+    lot.lastBlockHash = block.hash;
+    await lot.save();
+    await merkleService.maybeAutoCheckpoint(actor, lot.lotID);
+  }
+
   let alert = null;
-  if (riskScore >= alertThreshold && lot.status !== 'DISPOSED' && lot.status !== 'CONSUMED') {
+  if (isHighRisk && lot.status !== 'DISPOSED' && lot.status !== 'CONSUMED') {
     alert = await flagForInspection({
       lotID,
       riskScore,

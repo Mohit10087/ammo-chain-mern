@@ -13,6 +13,7 @@ import Alerts from './pages/Alerts';
 import Anomalies from './pages/Anomalies';
 import Forecast from './pages/Forecast';
 import LedgerExplorer from './pages/LedgerExplorer';
+import OfflineConsole from './pages/OfflineConsole';
 
 export default function App() {
   return (
@@ -32,6 +33,8 @@ export default function App() {
             <Route path="lots" element={<Lots />} />
             <Route path="lots/:lotID" element={<LotDetail />} />
             <Route path="scan" element={<Scan />} />
+            <Route path="move" element={<Scan />} />
+            <Route path="offline-console" element={<OfflineConsole />} />
             <Route path="requisitions" element={<Requisitions />} />
             <Route path="alerts" element={<Alerts />} />
             <Route path="anomalies" element={<Anomalies />} />

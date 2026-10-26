@@ -1,7 +1,16 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const Block = require('../models/Block');
+const Lot = require('../models/Lot');
+const Requisition = require('../models/Requisition');
+const InspectionAlert = require('../models/InspectionAlert');
+const AnomalyFlag = require('../models/AnomalyFlag');
+const SensorReading = require('../models/SensorReading');
+const DeviceState = require('../models/DeviceState');
 const ConsumptionHistory = require('../models/ConsumptionHistory');
+
 const smartContracts = require('../blockchain/smartContracts');
+const merkleService = require('../services/merkleService');
 
 const AMMO_TYPES = [
   { ammoType: '5.56x45mm', caliber: '5.56mm NATO' },
@@ -20,14 +29,25 @@ const DEMO_USERS = [
   { username: 'unit_bravo', org: 'FieldUnit', displayName: 'Unit Bravo QM', depotId: 'UNIT-BRAVO' }
 ];
 
+async function cleanDatabase() {
+  console.log('[seed] clearing old records & noisy simulator blocks...');
+  await Promise.all([
+    Block.deleteMany({}),
+    Lot.deleteMany({}),
+    Requisition.deleteMany({}),
+    InspectionAlert.deleteMany({}),
+    AnomalyFlag.deleteMany({}),
+    SensorReading.deleteMany({}),
+    DeviceState.deleteMany({}),
+    ConsumptionHistory.deleteMany({}),
+    User.deleteMany({})
+  ]);
+  console.log('[seed] database cleanly purged.');
+}
+
 async function seedUsers() {
   const created = [];
   for (const u of DEMO_USERS) {
-    const existing = await User.findOne({ username: u.username });
-    if (existing) {
-      created.push(existing);
-      continue;
-    }
     const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
     const user = await User.create({ ...u, passwordHash });
     created.push(user);
@@ -39,82 +59,217 @@ function actorFor(user) {
   return { org: user.org, username: user.username, depotId: user.depotId };
 }
 
-async function seedLotsAndLedger(users) {
+async function seedCuratedLots(users) {
   const factory = users.find((u) => u.org === 'OrdnanceFactory');
   const depot1 = users.find((u) => u.username === 'depot1_officer');
   const depot2 = users.find((u) => u.username === 'depot2_officer');
   const unitAlpha = users.find((u) => u.username === 'unit_alpha');
   const unitBravo = users.find((u) => u.username === 'unit_bravo');
 
-  let lotCounter = 1;
-  const manufactureBase = Date.now() - 400 * 86400000; // up to ~13 months old
+  const now = Date.now();
+  const dayMs = 86400000;
 
-  for (const { ammoType, caliber } of AMMO_TYPES) {
-    for (let i = 0; i < 4; i++) {
-      const lotID = `LOT-${ammoType.replace(/[^0-9A-Za-z]/g, '')}-${String(lotCounter).padStart(3, '0')}`;
-      lotCounter += 1;
+  // 1. LOT-FAC-556-01: At Factory (Status: REGISTERED)
+  console.log('[seed] creating LOT-FAC-556-01 (OrdnanceFactory)...');
+  await smartContracts.registerLot(actorFor(factory), {
+    lotID: 'LOT-FAC-556-01',
+    ammoType: '5.56x45mm',
+    caliber: '5.56mm NATO',
+    quantity: 5000,
+    manufactureDate: new Date(now - 10 * dayMs)
+  });
+  await merkleService.createCheckpoint(actorFor(factory), 'LOT-FAC-556-01');
 
-      const manufactureDate = new Date(manufactureBase + i * 20 * 86400000);
-      const quantity = 800 + Math.round(Math.random() * 600);
+  // 2. LOT-DEP1-762-01: At Depot 1 (Status: IN_STORAGE)
+  console.log('[seed] creating LOT-DEP1-762-01 (Depot 1)...');
+  await smartContracts.registerLot(actorFor(factory), {
+    lotID: 'LOT-DEP1-762-01',
+    ammoType: '7.62x51mm',
+    caliber: '7.62mm NATO',
+    quantity: 3500,
+    manufactureDate: new Date(now - 45 * dayMs)
+  });
+  await smartContracts.issueLot(actorFor(factory), {
+    lotID: 'LOT-DEP1-762-01',
+    toOrg: 'Depot',
+    toId: 'DEPOT-01'
+  });
+  await merkleService.createCheckpoint(actorFor(depot1), 'LOT-DEP1-762-01');
 
-      await smartContracts.registerLot(actorFor(factory), { lotID, ammoType, caliber, quantity, manufactureDate });
+  // 3. LOT-DEP1-9MM-01: At Depot 1 (Status: IN_STORAGE)
+  console.log('[seed] creating LOT-DEP1-9MM-01 (Depot 1)...');
+  await smartContracts.registerLot(actorFor(factory), {
+    lotID: 'LOT-DEP1-9MM-01',
+    ammoType: '9x19mm',
+    caliber: '9mm Parabellum',
+    quantity: 2000,
+    manufactureDate: new Date(now - 60 * dayMs)
+  });
+  await smartContracts.issueLot(actorFor(factory), {
+    lotID: 'LOT-DEP1-9MM-01',
+    toOrg: 'Depot',
+    toId: 'DEPOT-01'
+  });
+  await merkleService.createCheckpoint(actorFor(depot1), 'LOT-DEP1-9MM-01');
 
-      // Send every other lot to Depot-01, the rest to Depot-02
-      const targetDepot = i % 2 === 0 ? depot1 : depot2;
-      await smartContracts.issueLot(actorFor(factory), { lotID, toOrg: 'Depot', toId: targetDepot.depotId });
+  // 4. LOT-DEP2-556-01: At Depot 2 (Status: IN_STORAGE)
+  console.log('[seed] creating LOT-DEP2-556-01 (Depot 2)...');
+  await smartContracts.registerLot(actorFor(factory), {
+    lotID: 'LOT-DEP2-556-01',
+    ammoType: '5.56x45mm',
+    caliber: '5.56mm NATO',
+    quantity: 4000,
+    manufactureDate: new Date(now - 30 * dayMs)
+  });
+  await smartContracts.issueLot(actorFor(factory), {
+    lotID: 'LOT-DEP2-556-01',
+    toOrg: 'Depot',
+    toId: 'DEPOT-02'
+  });
+  await merkleService.createCheckpoint(actorFor(depot2), 'LOT-DEP2-556-01');
 
-      // A couple of lots per ammo type go further out to a field unit and get partially consumed
-      if (i === 0) {
-        const targetUnit = targetDepot.depotId === 'DEPOT-01' ? unitAlpha : unitBravo;
-        await smartContracts.issueLot(actorFor(targetDepot), { lotID, toOrg: 'FieldUnit', toId: targetUnit.depotId });
-        await smartContracts.recordConsumption(actorFor(targetUnit), { lotID, quantity: Math.round(quantity * 0.4) });
+  // 5. LOT-ALPHA-556-01: At Field Unit Alpha (Status: ISSUED, Partially Consumed)
+  console.log('[seed] creating LOT-ALPHA-556-01 (Field Unit Alpha)...');
+  await smartContracts.registerLot(actorFor(factory), {
+    lotID: 'LOT-ALPHA-556-01',
+    ammoType: '5.56x45mm',
+    caliber: '5.56mm NATO',
+    quantity: 2500,
+    manufactureDate: new Date(now - 90 * dayMs)
+  });
+  await smartContracts.issueLot(actorFor(factory), {
+    lotID: 'LOT-ALPHA-556-01',
+    toOrg: 'Depot',
+    toId: 'DEPOT-01'
+  });
+  await smartContracts.issueLot(actorFor(depot1), {
+    lotID: 'LOT-ALPHA-556-01',
+    toOrg: 'FieldUnit',
+    toId: 'UNIT-ALPHA'
+  });
+  await smartContracts.recordConsumption(actorFor(unitAlpha), {
+    lotID: 'LOT-ALPHA-556-01',
+    quantity: 1000
+  });
+  await merkleService.createCheckpoint(actorFor(unitAlpha), 'LOT-ALPHA-556-01');
 
-        // Push one deliberately hot/humid reading so the degradation dashboard has data on first run.
-        if (i === 0 && ammoType === AMMO_TYPES[0].ammoType) {
-          await smartContracts.updateStorageCondition(actorFor(targetUnit), {
-            lotID,
-            temperatureC: 41,
-            humidityPct: 78
-          });
-        }
-      } else {
-        // Leave remaining lots in depot storage with a normal condition reading.
-        await smartContracts.updateStorageCondition(actorFor(targetDepot), {
-          lotID,
-          temperatureC: 24 + Math.round(Math.random() * 4),
-          humidityPct: 38 + Math.round(Math.random() * 8)
-        });
-      }
-    }
-  }
+  // 6. LOT-ALPHA-9MM-01: At Field Unit Alpha (Status: ISSUED)
+  console.log('[seed] creating LOT-ALPHA-9MM-01 (Field Unit Alpha)...');
+  await smartContracts.registerLot(actorFor(factory), {
+    lotID: 'LOT-ALPHA-9MM-01',
+    ammoType: '9x19mm',
+    caliber: '9mm Parabellum',
+    quantity: 1200,
+    manufactureDate: new Date(now - 70 * dayMs)
+  });
+  await smartContracts.issueLot(actorFor(factory), {
+    lotID: 'LOT-ALPHA-9MM-01',
+    toOrg: 'Depot',
+    toId: 'DEPOT-01'
+  });
+  await smartContracts.issueLot(actorFor(depot1), {
+    lotID: 'LOT-ALPHA-9MM-01',
+    toOrg: 'FieldUnit',
+    toId: 'UNIT-ALPHA'
+  });
+  await merkleService.createCheckpoint(actorFor(unitAlpha), 'LOT-ALPHA-9MM-01');
+
+  // 7. LOT-BRAVO-762-01: At Field Unit Bravo (Status: ISSUED)
+  console.log('[seed] creating LOT-BRAVO-762-01 (Field Unit Bravo)...');
+  await smartContracts.registerLot(actorFor(factory), {
+    lotID: 'LOT-BRAVO-762-01',
+    ammoType: '7.62x51mm',
+    caliber: '7.62mm NATO',
+    quantity: 2200,
+    manufactureDate: new Date(now - 40 * dayMs)
+  });
+  await smartContracts.issueLot(actorFor(factory), {
+    lotID: 'LOT-BRAVO-762-01',
+    toOrg: 'Depot',
+    toId: 'DEPOT-02'
+  });
+  await smartContracts.issueLot(actorFor(depot2), {
+    lotID: 'LOT-BRAVO-762-01',
+    toOrg: 'FieldUnit',
+    toId: 'UNIT-BRAVO'
+  });
+  await merkleService.createCheckpoint(actorFor(unitBravo), 'LOT-BRAVO-762-01');
+
+  // 8. LOT-INSPECT-01: Adverse storage condition, FLAGGED_FOR_INSPECTION
+  console.log('[seed] creating LOT-INSPECT-01 with adverse storage condition alert...');
+  await smartContracts.registerLot(actorFor(factory), {
+    lotID: 'LOT-INSPECT-01',
+    ammoType: '5.56x45mm',
+    caliber: '5.56mm NATO',
+    quantity: 1500,
+    manufactureDate: new Date(now - 120 * dayMs)
+  });
+  await smartContracts.issueLot(actorFor(factory), {
+    lotID: 'LOT-INSPECT-01',
+    toOrg: 'Depot',
+    toId: 'DEPOT-01'
+  });
+  await smartContracts.updateStorageCondition(actorFor(depot1), {
+    lotID: 'LOT-INSPECT-01',
+    temperatureC: 45.5,
+    humidityPct: 84.0
+  });
+  await merkleService.createCheckpoint(actorFor(depot1), 'LOT-INSPECT-01');
+
+  // Seed sample AnomalyFlag for Commander Anomaly Console
+  console.log('[seed] creating demonstration anomaly flag...');
+  await AnomalyFlag.create({
+    rule: 'TRANSFER_QUANTITY_SPIKE',
+    lotID: 'LOT-DEP1-762-01',
+    unitId: 'DEPOT-01',
+    details: {
+      ammoType: '7.62x51mm',
+      quantity: 12000,
+      recentAverage: 2500,
+      factor: 3
+    },
+    severity: 'HIGH',
+    source: 'both',
+    mlScore: 0.88,
+    topFeatures: [
+      { feature: 'quantity_ratio_typical', value: 4.8, zScore: 5.2 },
+      { feature: 'events_last_hour_lot', value: 4, zScore: 3.8 }
+    ],
+    reason: 'Quantity spike confirmed by Isolation Forest (z=5.2)'
+  });
 }
 
 async function seedConsumptionHistory() {
   const now = new Date();
-  for (const { ammoType } of AMMO_TYPES) {
-    // Base monthly demand differs per ammo type, with a mild upward trend and noise,
-    // so the linear-regression and moving-average forecasts diverge slightly (useful for the viva).
-    const base = ammoType.startsWith('5.56') ? 900 : ammoType.startsWith('7.62') ? 500 : 700;
+  const configs = [
+    { ammoType: '5.56x45mm', base: 9000 },
+    { ammoType: '7.62x51mm', base: 5500 },
+    { ammoType: '9x19mm', base: 4000 }
+  ];
+
+  for (const { ammoType, base } of configs) {
     for (let m = 11; m >= 0; m--) {
       const period = new Date(now.getFullYear(), now.getMonth() - m, 1);
       const periodStr = `${period.getFullYear()}-${String(period.getMonth() + 1).padStart(2, '0')}`;
-      const trend = (11 - m) * 8; // slow upward drift over the year
-      const noise = Math.round((Math.random() - 0.5) * 60);
-      const quantityIssued = Math.max(0, base + trend + noise + 50);
+      const trend = (11 - m) * 45;
+      const noise = Math.round((Math.sin(m) * 0.15) * base);
       const quantityConsumed = Math.max(0, base + trend + noise);
+      const quantityIssued = quantityConsumed + Math.round(base * 0.08);
 
-      await ConsumptionHistory.updateOne(
-        { ammoType, period: periodStr },
-        { $set: { quantityIssued, quantityConsumed } },
-        { upsert: true }
-      );
+      await ConsumptionHistory.create({
+        ammoType,
+        period: periodStr,
+        quantityIssued,
+        quantityConsumed
+      });
     }
   }
 }
 
 async function seedAll() {
+  await cleanDatabase();
   const users = await seedUsers();
-  await seedLotsAndLedger(users);
+  await seedCuratedLots(users);
   await seedConsumptionHistory();
   return { users: users.map((u) => u.username), demoPassword: DEMO_PASSWORD };
 }

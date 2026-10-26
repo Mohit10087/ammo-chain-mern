@@ -159,6 +159,16 @@ export async function removeEvents(eventIds) {
   window.dispatchEvent(new CustomEvent('ordnance_offline_queue_changed'));
 }
 
+export async function removeEvent(eventId) {
+  return removeEvents([eventId]);
+}
+
+export async function clearQueue() {
+  const db = await getDB();
+  await db.clear(STORE_NAME);
+  window.dispatchEvent(new CustomEvent('ordnance_offline_queue_changed'));
+}
+
 /**
  * Synchronizes the offline queue with the backend server (POST /api/sync/batch).
  */

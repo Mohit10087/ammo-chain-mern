@@ -104,6 +104,7 @@ export default function TopBar() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {/* Tactical DDIL Status Pill */}
         <div
+          onClick={() => navigate('/offline-console')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -112,8 +113,10 @@ export default function TopBar() {
             border: `1px solid ${effectiveOnline ? 'rgba(76, 175, 80, 0.4)' : 'rgba(255, 152, 0, 0.5)'}`,
             padding: '4px 10px',
             borderRadius: 4,
-            fontSize: 11
+            fontSize: 11,
+            cursor: 'pointer'
           }}
+          title="Click to open Tactical DDIL Console"
         >
           <span
             style={{
